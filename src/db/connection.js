@@ -55,14 +55,30 @@ async function runMigrations() {
   const migrationsDir = path.join(__dirname, 'migrations');
   if (!fs.existsSync(migrationsDir)) return;
 
+  // Create schema_migrations tracking table if it doesn't exist
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      filename VARCHAR(255) PRIMARY KEY,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  const [appliedRows] = await pool.query('SELECT filename FROM schema_migrations');
+  const appliedSet = new Set(appliedRows.map(r => r.filename));
+
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
   for (const file of files) {
+    if (appliedSet.has(file)) {
+      continue; // Migration already applied — skip silently
+    }
+
     const filePath = path.join(migrationsDir, file);
     const sql = fs.readFileSync(filePath, 'utf8');
     if (sql.trim()) {
       try {
         await pool.query(sql);
-        console.log(`[DB Migration] Applied ${file}`);
+        await pool.query('INSERT INTO schema_migrations (filename) VALUES (?)', [file]);
+        console.log(`[DB Migration] Applied new migration: ${file}`);
       } catch (err) {
         if (!err.message.includes('already exists') && !err.message.includes('Duplicate column')) {
           console.warn(`[DB Migration Warning] ${file}: ${err.message}`);
