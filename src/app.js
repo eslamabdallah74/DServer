@@ -19,17 +19,6 @@ function createApp() {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser());
 
-  // Handle cPanel Sub-Path Prefix (e.g., /DServer/ -> /)
-  app.use((req, res, next) => {
-    if (req.url === '/DServer') {
-      return res.redirect('/DServer/');
-    }
-    if (req.url.startsWith('/DServer/')) {
-      req.url = req.url.replace(/^\/DServer/, '') || '/';
-    }
-    next();
-  });
-
   // Static Admin Dashboard UI
   app.use(express.static(path.join(__dirname, '../public')));
 
@@ -42,7 +31,7 @@ function createApp() {
 
   // Root redirect
   app.get('/', (req, res) => {
-    res.redirect('login.html');
+    res.redirect('/login.html');
   });
 
   // Central Error Middleware
