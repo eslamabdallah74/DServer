@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
       loginAlert.style.display = 'none';
 
       try {
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch('api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password }),
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (response.ok && data.success) {
           localStorage.setItem('admin_token', data.token);
           localStorage.setItem('admin_user', JSON.stringify(data.admin));
-          window.location.href = '/dashboard.html';
+          window.location.href = 'dashboard.html';
         } else {
           loginAlert.textContent = data.message || 'فشل تسجيل الدخول.';
           loginAlert.style.display = 'block';
@@ -46,14 +46,14 @@ function getAuthHeaders() {
 function checkAuthOrRedirect() {
   const token = localStorage.getItem('admin_token');
   if (!token) {
-    window.location.href = '/login.html';
+    window.location.href = 'login.html';
   }
 }
 
 function logout() {
   localStorage.removeItem('admin_token');
   localStorage.removeItem('admin_user');
-  fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
-    window.location.href = '/login.html';
+  fetch('api/auth/logout', { method: 'POST' }).finally(() => {
+    window.location.href = 'login.html';
   });
 }

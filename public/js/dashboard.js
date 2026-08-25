@@ -33,7 +33,7 @@ function switchTab(tabId, btn) {
 
 async function loadOverviewStats() {
   try {
-    const res = await fetch('/api/stats/overview', { headers: getAuthHeaders() });
+    const res = await fetch('api/stats/overview', { headers: getAuthHeaders() });
     if (!res.ok) return;
     const data = await res.json();
 
@@ -54,7 +54,7 @@ async function loadPlayers() {
   tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">جاري التحميل...</td></tr>';
 
   try {
-    const res = await fetch(`/api/players?search=${encodeURIComponent(search)}`, { headers: getAuthHeaders() });
+    const res = await fetch(`api/players?search=${encodeURIComponent(search)}`, { headers: getAuthHeaders() });
     const data = await res.json();
 
     if (!data.players || data.players.length === 0) {
@@ -109,7 +109,7 @@ document.getElementById('editPlayerForm').addEventListener('submit', async (e) =
   const coins = parseInt(document.getElementById('editPlayerCoins').value, 10);
 
   try {
-    const res = await fetch(`/api/players/${id}`, {
+    const res = await fetch(`api/players/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify({ name, coins }),
@@ -129,7 +129,7 @@ document.getElementById('editPlayerForm').addEventListener('submit', async (e) =
 async function deletePlayerItem(id) {
   if (!confirm(`هل أنت تأكد من حذف اللاعب ${id}؟`)) return;
   try {
-    const res = await fetch(`/api/players/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    const res = await fetch(`api/players/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     if (res.ok) {
       loadPlayers();
       loadOverviewStats();
@@ -145,7 +145,7 @@ async function loadFeedback() {
   tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">جاري التحميل...</td></tr>';
 
   try {
-    const res = await fetch('/api/feedback/direct', { headers: getAuthHeaders() });
+    const res = await fetch('api/feedback/direct', { headers: getAuthHeaders() });
     const data = await res.json();
 
     if (!data.feedback || data.feedback.length === 0) {
@@ -175,7 +175,7 @@ async function loadFeedback() {
 async function deleteFeedbackItem(id) {
   if (!confirm('هل تريد حذف هذه الملاحظة؟')) return;
   try {
-    const res = await fetch(`/api/feedback/direct/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    const res = await fetch(`api/feedback/direct/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     if (res.ok) {
       loadFeedback();
       loadOverviewStats();
@@ -191,7 +191,7 @@ async function loadRatings() {
   tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">جاري التحميل...</td></tr>';
 
   try {
-    const res = await fetch('/api/feedback/ratings', { headers: getAuthHeaders() });
+    const res = await fetch('api/feedback/ratings', { headers: getAuthHeaders() });
     const data = await res.json();
 
     if (!data.ratings || data.ratings.length === 0) {
@@ -221,7 +221,7 @@ async function loadRatings() {
 async function deleteRatingItem(id) {
   if (!confirm('هل تريد حذف هذا التقييم؟')) return;
   try {
-    const res = await fetch(`/api/feedback/ratings/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    const res = await fetch(`api/feedback/ratings/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     if (res.ok) {
       loadRatings();
       loadOverviewStats();
@@ -239,7 +239,7 @@ async function loadIssues() {
   tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">جاري التحميل...</td></tr>';
 
   try {
-    const res = await fetch(`/api/issues?severity=${severity}`, { headers: getAuthHeaders() });
+    const res = await fetch(`api/issues?severity=${severity}`, { headers: getAuthHeaders() });
     const data = await res.json();
 
     if (!data.issues || data.issues.length === 0) {
@@ -274,7 +274,7 @@ async function loadIssues() {
 async function deleteIssueItem(id) {
   if (!confirm('هل تريد حذف هذا السجل؟')) return;
   try {
-    const res = await fetch(`/api/issues/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    const res = await fetch(`api/issues/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
     if (res.ok) {
       loadIssues();
       loadOverviewStats();
@@ -287,7 +287,7 @@ async function deleteIssueItem(id) {
 async function clearAllIssues() {
   if (!confirm('⚠️ هل تريد بالفعل حذف جميع سجلات الأخطاء بشكل دائم؟')) return;
   try {
-    const res = await fetch('/api/issues/clear-all', { method: 'DELETE', headers: getAuthHeaders() });
+    const res = await fetch('api/issues/clear-all', { method: 'DELETE', headers: getAuthHeaders() });
     if (res.ok) {
       loadIssues();
       loadOverviewStats();
