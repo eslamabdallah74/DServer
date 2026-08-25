@@ -29,9 +29,18 @@ function createApp() {
   app.use('/api/issues', issueRoutes);
   app.use('/api/stats', statsRoutes);
 
-  // Root redirect
-  app.get('/', (req, res) => {
-    res.redirect('/login.html');
+  // Fallback handler for Web Dashboard pages (works under root /, /deceit/, /DServer/, etc.)
+  app.get('*', (req, res, next) => {
+    if (req.path.includes('/api/')) {
+      return next();
+    }
+    if (req.path.endsWith('.css') || req.path.endsWith('.js') || req.path.endsWith('.png') || req.path.endsWith('.jpg') || req.path.endsWith('.ico')) {
+      return next();
+    }
+    if (req.path.endsWith('dashboard.html')) {
+      return res.sendFile(path.join(__dirname, '../public/dashboard.html'));
+    }
+    return res.sendFile(path.join(__dirname, '../public/login.html'));
   });
 
   // Central Error Middleware
