@@ -16,13 +16,20 @@ async function startServer() {
     console.warn('[Warning] MySQL connection offline. Dependent endpoints will return errors.');
   }
 
-  server.listen(config.port, () => {
-    console.log(`==================================================`);
-    console.log(`  🚀 Deceit Server active on port ${config.port}`);
-    console.log(`  💻 Dashboard: http://localhost:${config.port}/dashboard.html`);
-    console.log(`  🔐 Login:     http://localhost:${config.port}/login.html`);
-    console.log(`==================================================`);
-  });
+  // Handle Phusion Passenger (cPanel) vs Standalone Node.js
+  if (typeof(PhusionPassenger) !== 'undefined') {
+    server.listen('passenger');
+    console.log('[Server] 🚀 Bound to Phusion Passenger IPC Socket.');
+  } else {
+    const port = process.env.PORT || config.port || 3002;
+    server.listen(port, () => {
+      console.log(`==================================================`);
+      console.log(`  🚀 Deceit Server active on port ${port}`);
+      console.log(`  💻 Dashboard: http://localhost:${port}/dashboard.html`);
+      console.log(`  🔐 Login:     http://localhost:${port}/login.html`);
+      console.log(`==================================================`);
+    });
+  }
 }
 
 startServer();
