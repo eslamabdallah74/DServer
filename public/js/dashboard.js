@@ -15,8 +15,8 @@ function loadAdminProfile() {
 }
 
 function switchTab(tabId, btn) {
-  document.querySelectorAll('.nav-item button').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.nav-menu button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(c => c.classList.remove('active'));
 
   btn.classList.add('active');
   const targetTab = document.getElementById(`tab-${tabId}`);
@@ -66,19 +66,19 @@ async function loadPlayers() {
       <tr>
         <td><code>${escapeHtml(p.playerId)}</code></td>
         <td><strong>${escapeHtml(p.name)}</strong></td>
-        <td><span class="badge rating-star">🪙 ${p.coins}</span></td>
+        <td><span class="badge-gaming gold">🪙 ${p.coins}</span></td>
         <td>${p.matchesPlayed}</td>
         <td>${p.gamesWon}</td>
         <td><small>${formatDate(p.updatedAt)}</small></td>
         <td>
           <div style="display: flex; gap: 6px;">
-            <button class="btn btn-secondary btn-sm" onclick="openEditPlayerModal('${escapeHtml(p.playerId)}', '${escapeHtml(p.name)}', ${p.coins})" title="تعديل">
+            <button class="btn-gaming btn-glass btn-icon-only" onclick="openEditPlayerModal('${escapeHtml(p.playerId)}', '${escapeHtml(p.name)}', ${p.coins})" title="تعديل">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="viewJsonModal('بيانات اللاعب', ${escapeJsonAttr(p)})" title="عرض التفاصيل">
+            <button class="btn-gaming btn-glass btn-icon-only" onclick="viewJsonModal('بيانات اللاعب', ${escapeJsonAttr(p)})" title="عرض التفاصيل">
               <i class="fa-solid fa-code"></i>
             </button>
-            <button class="btn btn-danger btn-sm" onclick="deletePlayerItem('${escapeHtml(p.playerId)}')" title="حذف">
+            <button class="btn-gaming btn-danger-glass btn-icon-only" onclick="deletePlayerItem('${escapeHtml(p.playerId)}')" title="حذف">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
@@ -86,7 +86,7 @@ async function loadPlayers() {
       </tr>
     `).join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--status-danger);">فشل تحميل البيانات.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--accent-crimson);">فشل تحميل البيانات.</td></tr>';
   }
 }
 
@@ -155,20 +155,20 @@ async function loadFeedback() {
 
     tbody.innerHTML = data.feedback.map(f => `
       <tr>
-        <td><span class="badge warning">${escapeHtml(f.category)}</span></td>
+        <td><span class="badge-gaming warning">${escapeHtml(f.category)}</span></td>
         <td style="max-width: 300px;">${escapeHtml(f.message)}</td>
         <td><small>${escapeHtml(f.appVersion || 'N/A')}</small></td>
-        <td><small style="color: var(--text-dim);">${escapeHtml(f.deviceInfo || 'N/A')}</small></td>
+        <td><small style="color: var(--text-muted);">${escapeHtml(f.deviceInfo || 'N/A')}</small></td>
         <td><small>${formatDate(f.createdAt)}</small></td>
         <td>
-          <button class="btn btn-danger btn-sm" onclick="deleteFeedbackItem('${escapeHtml(f.feedbackId)}')" title="حذف">
+          <button class="btn-gaming btn-danger-glass btn-icon-only" onclick="deleteFeedbackItem('${escapeHtml(f.feedbackId)}')" title="حذف">
             <i class="fa-solid fa-trash"></i>
           </button>
         </td>
       </tr>
     `).join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--status-danger);">فشل تحميل البيانات.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-crimson);">فشل تحميل البيانات.</td></tr>';
   }
 }
 
@@ -202,19 +202,19 @@ async function loadRatings() {
     tbody.innerHTML = data.ratings.map(r => `
       <tr>
         <td><code>${escapeHtml(r.matchId)}</code></td>
-        <td><span class="badge rating-star">★ ${r.rating} / 5</span></td>
+        <td><span class="badge-gaming gold">★ ${r.rating} / 5</span></td>
         <td><small>${escapeHtml(r.feedbackCategory)}</small></td>
         <td style="max-width: 250px;">${escapeHtml(r.comment || 'بدون تعليق')}</td>
         <td><small>${formatDate(r.createdAt)}</small></td>
         <td>
-          <button class="btn btn-danger btn-sm" onclick="deleteRatingItem('${escapeHtml(r.ratingId)}')" title="حذف">
+          <button class="btn-gaming btn-danger-glass btn-icon-only" onclick="deleteRatingItem('${escapeHtml(r.ratingId)}')" title="حذف">
             <i class="fa-solid fa-trash"></i>
           </button>
         </td>
       </tr>
     `).join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--status-danger);">فشل تحميل البيانات.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--accent-crimson);">فشل تحميل البيانات.</td></tr>';
   }
 }
 
@@ -249,25 +249,25 @@ async function loadIssues() {
 
     tbody.innerHTML = data.issues.map(i => `
       <tr>
-        <td><span class="badge ${i.severity}">${i.severity.toUpperCase()}</span></td>
-        <td><small><strong>${escapeHtml(i.page || '')}</strong><br><span style="color: var(--text-dim);">${escapeHtml(i.method || '')}</span></small></td>
+        <td><span class="badge-gaming ${i.severity}">${i.severity.toUpperCase()}</span></td>
+        <td><small><strong>${escapeHtml(i.page || '')}</strong><br><span style="color: var(--text-muted);">${escapeHtml(i.method || '')}</span></small></td>
         <td style="max-width: 250px;">${escapeHtml(i.message)}</td>
         <td><small>${escapeHtml(i.playerName || i.playerId || 'مجهول')}</small></td>
         <td><small>${formatDate(i.createdAt)}</small></td>
         <td>
-          <button class="btn btn-secondary btn-sm" onclick="viewJsonModal('تفاصيل الخطأ', ${escapeJsonAttr(i)})">
+          <button class="btn-gaming btn-glass btn-icon-only" onclick="viewJsonModal('تفاصيل الخطأ', ${escapeJsonAttr(i)})">
             <i class="fa-solid fa-code"></i> التفاصيل
           </button>
         </td>
         <td>
-          <button class="btn btn-danger btn-sm" onclick="deleteIssueItem('${escapeHtml(i.issueId)}')" title="حذف">
+          <button class="btn-gaming btn-danger-glass btn-icon-only" onclick="deleteIssueItem('${escapeHtml(i.issueId)}')" title="حذف">
             <i class="fa-solid fa-trash"></i>
           </button>
         </td>
       </tr>
     `).join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--status-danger);">فشل تحميل البيانات.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--accent-crimson);">فشل تحميل البيانات.</td></tr>';
   }
 }
 

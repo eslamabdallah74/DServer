@@ -3,163 +3,165 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>لوحة التحكم — Deceit Offline Server</title>
+  <title>لوحة التحكم — Deceit Server</title>
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-  <div class="app-layout">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <i class="fa-solid fa-database" style="color: var(--accent-cyan); font-size: 22px;"></i>
-        <h2>Deceit DB Hub</h2>
+  <div class="ambient-glow-1"></div>
+  <div class="ambient-glow-2"></div>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar-gaming">
+      <div class="sidebar-logo">
+        <i class="fa-solid fa-shield-halved"></i>
+        <h2>Deceit Core</h2>
       </div>
 
-      <ul class="nav-list">
-        <li class="nav-item">
-          <button class="active" onclick="switchTab('overview', this)">
+      <ul class="nav-menu">
+        <li>
+          <button class="nav-link active" onclick="switchTab('overview', this)">
             <i class="fa-solid fa-chart-pie"></i>
-            <span>نظرة عامة</span>
+            <span>لوحة المؤشرات</span>
           </button>
         </li>
-        <li class="nav-item">
-          <button onclick="switchTab('players', this)">
-            <i class="fa-solid fa-users"></i>
-            <span>بيانات اللاعبين</span>
+        <li>
+          <button class="nav-link" onclick="switchTab('players', this)">
+            <i class="fa-solid fa-users-gear"></i>
+            <span>إدارة اللاعبين</span>
           </button>
         </li>
-        <li class="nav-item">
-          <button onclick="switchTab('feedback', this)">
+        <li>
+          <button class="nav-link" onclick="switchTab('feedback', this)">
             <i class="fa-solid fa-comments"></i>
-            <span>الملاحظات والآراء</span>
+            <span>الآراء والملاحظات</span>
           </button>
         </li>
-        <li class="nav-item">
-          <button onclick="switchTab('ratings', this)">
+        <li>
+          <button class="nav-link" onclick="switchTab('ratings', this)">
             <i class="fa-solid fa-star"></i>
             <span>تقييم المباريات</span>
           </button>
         </li>
-        <li class="nav-item">
-          <button onclick="switchTab('issues', this)">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <span>سجل الأخطاء Log</span>
+        <li>
+          <button class="nav-link" onclick="switchTab('issues', this)">
+            <i class="fa-solid fa-bug"></i>
+            <span>سجل الأعطال Logs</span>
           </button>
         </li>
       </ul>
 
-      <div class="sidebar-footer">
-        <div class="user-profile-badge">
-          <div class="user-info">
-            <div class="username" id="displayAdminName">Admin</div>
-            <div class="role">المشرف العام</div>
+      <div class="sidebar-profile">
+        <div class="profile-card">
+          <div>
+            <div class="profile-name" id="displayAdminName">Admin</div>
+            <div class="profile-role">المشرف الرئيسي</div>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="logout()" title="تسجيل الخروج">
+          <button class="btn-gaming btn-danger-glass btn-icon-only" onclick="logout()" title="تسجيل الخروج">
             <i class="fa-solid fa-right-from-bracket"></i>
           </button>
         </div>
       </div>
     </aside>
 
-    <!-- Main Content -->
-    <main class="main-content">
+    <!-- Main Viewport -->
+    <main class="main-viewport">
 
       <!-- TAB 1: OVERVIEW -->
-      <section id="tab-overview" class="tab-content active">
-        <div class="page-header">
-          <div class="page-title">
-            <h1>لوحة التحكم الرئيسية</h1>
-            <p>إحصائيات وقاعدة بيانات خادم Deceit Offline</p>
+      <section id="tab-overview" class="tab-pane active">
+        <div class="header-bar">
+          <div class="page-title-group">
+            <h1>نظرة عامة على النظام</h1>
+            <p>مؤشرات وإحصائيات خادم Deceit وقواعد البيانات</p>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="loadOverviewStats()">
+          <button class="btn-gaming btn-glass" onclick="loadOverviewStats()">
             <i class="fa-solid fa-rotate-right"></i> تحديث
           </button>
         </div>
 
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon primary">
+        <div class="stats-grid-gaming">
+          <div class="stat-card-gaming">
+            <div class="stat-card-icon gold">
               <i class="fa-solid fa-users"></i>
             </div>
-            <div class="stat-info">
-              <div class="stat-value" id="statPlayers">0</div>
-              <div class="stat-label">إجمالي اللاعبين</div>
+            <div>
+              <div class="stat-num" id="statPlayers">0</div>
+              <div class="stat-title">إجمالي الحسابات واللاعبين</div>
             </div>
           </div>
 
-          <div class="stat-card">
-            <div class="stat-icon cyan">
-              <i class="fa-solid fa-comments"></i>
+          <div class="stat-card-gaming">
+            <div class="stat-card-icon cyan">
+              <i class="fa-solid fa-message"></i>
             </div>
-            <div class="stat-info">
-              <div class="stat-value" id="statFeedback">0</div>
-              <div class="stat-label">الملاحظات والآراء</div>
+            <div>
+              <div class="stat-num" id="statFeedback">0</div>
+              <div class="stat-title">الملاحظات المباشرة</div>
             </div>
           </div>
 
-          <div class="stat-card">
-            <div class="stat-icon purple">
+          <div class="stat-card-gaming">
+            <div class="stat-card-icon purple">
               <i class="fa-solid fa-star"></i>
             </div>
-            <div class="stat-info">
-              <div class="stat-value" id="statRatings">0 (★ 0.0)</div>
-              <div class="stat-label">تقييمات المباريات</div>
+            <div>
+              <div class="stat-num" id="statRatings">0 (★ 0.0)</div>
+              <div class="stat-title">متوسط تقييم اللعبة</div>
             </div>
           </div>
 
-          <div class="stat-card">
-            <div class="stat-icon danger">
-              <i class="fa-solid fa-bug"></i>
+          <div class="stat-card-gaming">
+            <div class="stat-card-icon crimson">
+              <i class="fa-solid fa-skull"></i>
             </div>
-            <div class="stat-info">
-              <div class="stat-value" id="statIssues">0</div>
-              <div class="stat-label">أخطاء النظام الحادّة</div>
+            <div>
+              <div class="stat-num" id="statIssues">0</div>
+              <div class="stat-title">أخطاء النظام الحرجة</div>
             </div>
           </div>
         </div>
 
-        <!-- Quick Summary Box -->
-        <div class="card">
-          <div class="card-header">
-            <h3><i class="fa-solid fa-circle-info" style="color: var(--accent-cyan);"></i> حالة الخادم وقاعدة البيانات</h3>
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-bolt" style="color: var(--gold-primary);"></i> اتصال قاعدة البيانات</h3>
           </div>
-          <p style="color: var(--text-muted); font-size: 14px; line-height: 1.8;">
-            تم ربط الخادم بنجاح بقاعدة بيانات <strong>MySQL</strong>. جميع البيانات الخاصة بالحسابات، العملات، الملاحظات المباشرة، وتقارير الأعطال التي كانت تُحفظ سابقاً في Mongo تم هجرتها وحفظها بشكل منظّم في الخادم الجديد.
+          <p style="color: var(--text-secondary); font-size: 14px;">
+            تم تشغيل <strong>MySQL Engine</strong> بنجاح. يتم استقبال مزامنة بيانات اللاعبين والملاحظات وسجلات الأعطال تلقائياً من تطبيق اللعبة وحفظها بصورة منظمة وآمنة.
           </p>
         </div>
       </section>
 
       <!-- TAB 2: PLAYERS -->
-      <section id="tab-players" class="tab-content">
-        <div class="page-header">
-          <div class="page-title">
-            <h1>بيانات اللاعبين</h1>
-            <p>عرض وتعديل حسابات اللاعبين وعملاتهم</p>
+      <section id="tab-players" class="tab-pane">
+        <div class="header-bar">
+          <div class="page-title-group">
+            <h1>إدارة بيانات اللاعبين</h1>
+            <p>عرض وتعديل حسابات وعملات اللاعبين</p>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <div class="search-box">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <div class="search-input-wrapper">
               <i class="fa-solid fa-magnifying-glass"></i>
               <input type="text" id="playerSearchInput" placeholder="بحث باسم اللاعب أو ID..." onkeyup="debouncePlayerSearch()">
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="loadPlayers()">
-              <i class="fa-solid fa-rotate-right"></i> إعادة تحميل
+            <button class="btn-gaming btn-glass" onclick="loadPlayers()">
+              <i class="fa-solid fa-rotate-right"></i> تحديث
             </button>
           </div>
 
-          <div class="table-responsive">
-            <table class="data-table">
+          <div class="table-container">
+            <table class="gaming-table">
               <thead>
                 <tr>
-                  <th>Player ID</th>
+                  <th>معرف اللاعب Player ID</th>
                   <th>اسم اللاعب</th>
                   <th>العملات 🪙</th>
                   <th>المباريات</th>
                   <th>الفوز</th>
-                  <th>آخر تحديث</th>
+                  <th>آخر ظهور</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
@@ -172,29 +174,29 @@
       </section>
 
       <!-- TAB 3: FEEDBACK -->
-      <section id="tab-feedback" class="tab-content">
-        <div class="page-header">
-          <div class="page-title">
+      <section id="tab-feedback" class="tab-pane">
+        <div class="header-bar">
+          <div class="page-title-group">
             <h1>الملاحظات والآراء Direct Feedback</h1>
-            <p>رسائل اللاعبين والبلاغات المباشرة</p>
+            <p>بلاغات واقتراحات اللاعبين المرسلة من اللعبة</p>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h3><i class="fa-solid fa-inbox"></i> قائمة الملاحظات</h3>
-            <button class="btn btn-secondary btn-sm" onclick="loadFeedback()">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-inbox" style="color: var(--accent-cyan);"></i> صندوق الرسائل</h3>
+            <button class="btn-gaming btn-glass" onclick="loadFeedback()">
               <i class="fa-solid fa-rotate-right"></i> تحديث
             </button>
           </div>
 
-          <div class="table-responsive">
-            <table class="data-table">
+          <div class="table-container">
+            <table class="gaming-table">
               <thead>
                 <tr>
                   <th>التصنيف</th>
                   <th>الرسالة</th>
-                  <th>إصدار التطبيق</th>
+                  <th>إصدار اللعبة</th>
                   <th>معلومات الجهاز</th>
                   <th>التاريخ</th>
                   <th>إجراء</th>
@@ -209,27 +211,27 @@
       </section>
 
       <!-- TAB 4: RATINGS -->
-      <section id="tab-ratings" class="tab-content">
-        <div class="page-header">
-          <div class="page-title">
-            <h1>تقييمات المباريات Match Ratings</h1>
-            <p>تقييمات النجوم وتعليقات اللاعبين بعد المباريات</p>
+      <section id="tab-ratings" class="tab-pane">
+        <div class="header-bar">
+          <div class="page-title-group">
+            <h1>تقييم المباريات Match Ratings</h1>
+            <p>تقييمات 1-5 نجوم وتعليقات اللاعبين بعد المباريات</p>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h3><i class="fa-solid fa-star" style="color: #fbbf24;"></i> التقييمات</h3>
-            <button class="btn btn-secondary btn-sm" onclick="loadRatings()">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-star" style="color: var(--gold-primary);"></i> التقييمات</h3>
+            <button class="btn-gaming btn-glass" onclick="loadRatings()">
               <i class="fa-solid fa-rotate-right"></i> تحديث
             </button>
           </div>
 
-          <div class="table-responsive">
-            <table class="data-table">
+          <div class="table-container">
+            <table class="gaming-table">
               <thead>
                 <tr>
-                  <th>معرف المباراة Match ID</th>
+                  <th>المباراة Match ID</th>
                   <th>التقييم</th>
                   <th>التصنيف</th>
                   <th>التعليق</th>
@@ -246,34 +248,34 @@
       </section>
 
       <!-- TAB 5: ISSUES / LOGS -->
-      <section id="tab-issues" class="tab-content">
-        <div class="page-header">
-          <div class="page-title">
-            <h1>سجل أخطاء التطبيق App Issues</h1>
-            <p>تقارير الاستثناءات وأخطاء النظام المرسلة من التطبيق</p>
+      <section id="tab-issues" class="tab-pane">
+        <div class="header-bar">
+          <div class="page-title-group">
+            <h1>سجل أعطال التطبيق Crash Logs</h1>
+            <p>تقارير الأعطال البرمجية وتتبع Stack Traces</p>
           </div>
-          <button class="btn btn-danger btn-sm" onclick="clearAllIssues()">
+          <button class="btn-gaming btn-danger-glass" onclick="clearAllIssues()">
             <i class="fa-solid fa-trash-can"></i> مسح جميع السجلات
           </button>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <div style="display: flex; gap: 10px;">
-              <select id="issueSeverityFilter" class="form-control" style="width: 150px;" onchange="loadIssues()">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <div style="display: flex; gap: 12px;">
+              <select id="issueSeverityFilter" class="form-control-gaming" style="width: 170px;" onchange="loadIssues()">
                 <option value="">جميع المستويات</option>
                 <option value="critical">Critical حرج</option>
                 <option value="error">Error خطأ</option>
                 <option value="warning">Warning تحذير</option>
               </select>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="loadIssues()">
+            <button class="btn-gaming btn-glass" onclick="loadIssues()">
               <i class="fa-solid fa-rotate-right"></i> تحديث
             </button>
           </div>
 
-          <div class="table-responsive">
-            <table class="data-table">
+          <div class="table-container">
+            <table class="gaming-table">
               <thead>
                 <tr>
                   <th>المستوى</th>
@@ -297,43 +299,44 @@
   </div>
 
   <!-- Modal: View JSON / Stack Trace -->
-  <div id="detailsModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
+  <div id="detailsModal" class="modal-backdrop-gaming">
+    <div class="modal-gaming">
+      <div class="modal-header-gaming">
         <h3 id="modalTitle">تفاصيل البيانات</h3>
-        <button class="modal-close" onclick="closeModal('detailsModal')">&times;</button>
+        <button class="modal-close-btn" onclick="closeModal('detailsModal')">&times;</button>
       </div>
-      <div class="modal-body">
-        <pre id="modalCode" class="code-block"></pre>
+      <div>
+        <pre id="modalCode" class="code-json"></pre>
       </div>
     </div>
   </div>
 
   <!-- Modal: Edit Player -->
-  <div id="editPlayerModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
+  <div id="editPlayerModal" class="modal-backdrop-gaming">
+    <div class="modal-gaming">
+      <div class="modal-header-gaming">
         <h3>تعديل بيانات اللاعب</h3>
-        <button class="modal-close" onclick="closeModal('editPlayerModal')">&times;</button>
+        <button class="modal-close-btn" onclick="closeModal('editPlayerModal')">&times;</button>
       </div>
       <form id="editPlayerForm">
         <input type="hidden" id="editPlayerId">
-        <div class="form-group">
+        <div class="form-field">
           <label>اسم اللاعب</label>
-          <input type="text" id="editPlayerName" class="form-control" required>
+          <input type="text" id="editPlayerName" class="form-control-gaming" required>
         </div>
-        <div class="form-group">
-          <label>عدد العملات 🪙</label>
-          <input type="number" id="editPlayerCoins" class="form-control" min="0" required>
+        <div class="form-field">
+          <label>رصيد العملات 🪙</label>
+          <input type="number" id="editPlayerCoins" class="form-control-gaming" min="0" required>
         </div>
-        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('editPlayerModal')">إلغاء</button>
-          <button type="submit" class="btn btn-primary">حفظ التغييرات</button>
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+          <button type="button" class="btn-gaming btn-glass" onclick="closeModal('editPlayerModal')">إلغاء</button>
+          <button type="submit" class="btn-gaming btn-gold">حفظ التغييرات</button>
         </div>
       </form>
     </div>
   </div>
 
+  <script src="/js/particles.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/dashboard.js"></script>
 </body>
