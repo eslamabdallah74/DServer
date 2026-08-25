@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول — Deceit Offline Server</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="logo-badge">
+          <i class="fa-solid fa-server"></i>
+          <span>Deceit Offline</span>
+        </div>
+        <p>تسجيل الدخول للوحة تحكم الخادم والمستندات</p>
+      </div>
+
+      <div id="loginAlert" style="display: none; padding: 12px; margin-bottom: 20px; border-radius: 8px; font-size: 13px; background: rgba(239,68,68,0.2); color: #fca5a5; border: 1px solid rgba(239,68,68,0.4);">
+      </div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username"><i class="fa-solid fa-user"></i> اسم المستخدم أو البريد الإلكتروني</label>
+          <input type="text" id="username" class="form-control" placeholder="admin" required autofocus>
+        </div>
+
+        <div class="form-group">
+          <label for="password"><i class="fa-solid fa-lock"></i> كلمة المرور</label>
+          <input type="password" id="password" class="form-control" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+          <span>تسجيل الدخول</span>
+          <i class="fa-solid fa-arrow-left"></i>
+        </button>
+      </form>
+
+      <div style="margin-top: 24px; text-align: center; font-size: 12px; color: var(--text-dim);">
+        الحساب الافتراضي معرف في ملف <code>.env</code>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/auth.js"></script>
+</body>
+</html>

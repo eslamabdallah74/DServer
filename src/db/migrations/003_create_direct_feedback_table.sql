@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS direct_feedback (
+  feedback_id VARCHAR(64) PRIMARY KEY,
+  device_id VARCHAR(64) DEFAULT NULL,
+  category VARCHAR(50) NOT NULL,
+  app_version VARCHAR(50) DEFAULT NULL,
+  device_info TEXT DEFAULT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
