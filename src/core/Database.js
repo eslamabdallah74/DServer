@@ -28,8 +28,8 @@ class Database {
       const tempConn = await mysql.createConnection({ host, port, user, password });
       await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\`;`);
       await tempConn.end();
-    } catch (err) {
-      console.warn('[DB Warning] Database auto-creation check skipped:', err.message);
+    } catch (_) {
+      // Ignore — Database is pre-created in cPanel or user lacks CREATE DATABASE privilege
     }
   }
 
