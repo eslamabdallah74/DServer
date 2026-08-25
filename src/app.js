@@ -20,6 +20,19 @@ function createApp() {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser());
 
+  // Enforce Trailing Slash on sub-path directory requests (e.g. /deceit -> /deceit/)
+  // This ensures browser resolves relative assets (css/styles.css) correctly
+  app.use((req, res, next) => {
+    const rawUrl = req.originalUrl || req.url;
+    const cleanUrl = rawUrl.split('?')[0];
+
+    if (!cleanUrl.endsWith('/') && !cleanUrl.includes('.') && !cleanUrl.includes('/api/')) {
+      const queryString = rawUrl.includes('?') ? '?' + rawUrl.split('?')[1] : '';
+      return res.redirect(301, cleanUrl + '/' + queryString);
+    }
+    next();
+  });
+
   // Normalize incoming URLs for cPanel Passenger Sub-Paths & API routes
   app.use((req, res, next) => {
     const rawUrl = req.originalUrl || req.url;
