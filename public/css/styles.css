@@ -197,19 +197,24 @@ body {
   min-height: 100vh;
 }
 
-/* Sidebar */
+/* Sidebar (RTL Fixed to Right) */
 .sidebar-gaming {
   width: 270px;
-  background: rgba(12, 18, 34, 0.85);
+  background: rgba(12, 18, 34, 0.92);
   backdrop-filter: var(--glass-blur);
-  border-right: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-left: 1px solid var(--glass-border);
+  border-right: none;
   display: flex;
   flex-direction: column;
   padding: 28px 20px;
   position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
   height: 100vh;
   z-index: 100;
-  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
 }
 
 .sidebar-logo {
@@ -321,12 +326,16 @@ body {
   font-weight: 500;
 }
 
-/* Main Area */
+/* Main Area (RTL offset margin-right 270px) */
 .main-viewport {
   flex: 1;
-  margin-left: 270px;
+  margin-right: 270px;
+  margin-left: 0;
+  width: calc(100% - 270px);
   padding: 36px 44px;
+  min-width: 0;
 }
+
 
 .header-bar {
   display: flex;
