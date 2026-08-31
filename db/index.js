@@ -1,12 +1,28 @@
 const mysql = require('mysql2/promise');
+const { Pool: PgPool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
 let pool = null;
+let dbType = null; // 'pg' or 'mysql'
 let dbConnected = false;
 let isMigrating = false;
 
 function initPool() {
+  // Priority 1: Postgres via DATABASE_URL (Vercel/Neon)
+  const pgUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  if (pgUrl && pgUrl.startsWith('postgres')) {
+    try {
+      pool = new PgPool({ connectionString: pgUrl, ssl: { rejectUnauthorized: false } });
+      dbType = 'pg';
+      console.log('[DB] PostgreSQL pool initialized from DATABASE_URL');
+      return pool;
+    } catch (err) {
+      console.error('[DB] Failed to init PostgreSQL pool:', err.message);
+    }
+  }
+
+  // Priority 2: MySQL via env vars
   const host = process.env.DB_HOST || '127.0.0.1';
   const port = parseInt(process.env.DB_PORT || '3306', 10);
   const user = process.env.DB_USER || 'root';
@@ -14,47 +30,45 @@ function initPool() {
   const database = process.env.DB_NAME || 'deceit_db';
 
   if (!process.env.DB_HOST && !process.env.DB_NAME) {
-    console.log('[DB] No DB_HOST or DB_NAME configured in environment. Database features will run offline/mock mode.');
+    console.log('[DB] No database configured. Running in-memory mode.');
     return null;
   }
 
   try {
     pool = mysql.createPool({
-      host,
-      port,
-      user,
-      password,
-      database,
+      host, port, user, password, database,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
       connectTimeout: 5000,
       idleTimeout: 60000,
     });
-
+    dbType = 'mysql';
     console.log(`[DB] MySQL pool initialized (${host}:${port}/${database})`);
     return pool;
   } catch (err) {
-    console.error('[DB] Failed to initialize MySQL pool:', err.message);
+    console.error('[DB] Failed to init MySQL pool:', err.message);
     pool = null;
     dbConnected = false;
     return null;
   }
 }
 
-async function ensureDatabaseExists(host, port, user, password, database) {
-  try {
-    const tempConn = await mysql.createConnection({
-      host,
-      port,
-      user,
-      password,
-      connectTimeout: 4000,
-    });
-    await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\`;`);
-    await tempConn.end();
-  } catch (err) {
-    // Suppress database creation failure (user might not have privilege)
+// Unified query helper — same interface for both MySQL and Postgres
+// Returns [rows, result] regardless of driver
+async function query(sql, params = []) {
+  if (!pool) throw new Error('No database pool');
+
+  if (dbType === 'pg') {
+    // Convert MySQL ? placeholders to Postgres $1, $2, ...
+    let idx = 0;
+    const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
+    // Convert NOW() to Postgres equivalent
+    const finalSql = pgSql.replace(/\bNOW\(\)/gi, 'NOW()');
+    const result = await pool.query(finalSql, params);
+    return [result.rows, result];
+  } else {
+    return pool.query(sql, params);
   }
 }
 
@@ -63,14 +77,6 @@ async function testConnectionAndMigrate() {
   isMigrating = true;
 
   try {
-    const host = process.env.DB_HOST || '127.0.0.1';
-    const port = parseInt(process.env.DB_PORT || '3306', 10);
-    const user = process.env.DB_USER || 'root';
-    const password = process.env.DB_PASSWORD || '';
-    const database = process.env.DB_NAME || 'deceit_db';
-
-    await ensureDatabaseExists(host, port, user, password, database);
-
     if (!pool) initPool();
     if (!pool) {
       dbConnected = false;
@@ -78,14 +84,28 @@ async function testConnectionAndMigrate() {
       return false;
     }
 
-    const conn = await pool.getConnection();
-    console.log(`[DB] ✅ Successfully connected to MySQL database "${database}".`);
-    conn.release();
-    dbConnected = true;
+    if (dbType === 'pg') {
+      const client = await pool.connect();
+      console.log('[DB] ✅ Connected to PostgreSQL.');
+      client.release();
+      dbConnected = true;
+      await runPgMigrations();
+    } else {
+      const host = process.env.DB_HOST || '127.0.0.1';
+      const port = parseInt(process.env.DB_PORT || '3306', 10);
+      const user = process.env.DB_USER || 'root';
+      const password = process.env.DB_PASSWORD || '';
+      const database = process.env.DB_NAME || 'deceit_db';
+      await ensureDatabaseExists(host, port, user, password, database);
 
-    await runMigrations();
+      const conn = await pool.getConnection();
+      console.log(`[DB] ✅ Connected to MySQL "${database}".`);
+      conn.release();
+      dbConnected = true;
+      await runMysqlMigrations();
+    }
   } catch (err) {
-    console.warn(`[DB] ⚠️ MySQL connection check failed: ${err.message}. Server running gracefully without DB.`);
+    console.warn(`[DB] ⚠️ Connection failed: ${err.message}. Running in-memory mode.`);
     dbConnected = false;
   } finally {
     isMigrating = false;
@@ -94,7 +114,70 @@ async function testConnectionAndMigrate() {
   return dbConnected;
 }
 
-async function runMigrations() {
+async function ensureDatabaseExists(host, port, user, password, database) {
+  try {
+    const tempConn = await mysql.createConnection({ host, port, user, password, connectTimeout: 4000 });
+    await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\`;`);
+    await tempConn.end();
+  } catch (err) {
+    // User might not have CREATE privilege — that's fine
+  }
+}
+
+async function runPgMigrations() {
+  if (!pool || !dbConnected) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS player_profiles (
+        id SERIAL PRIMARY KEY,
+        player_id VARCHAR(64) NOT NULL UNIQUE,
+        nickname VARCHAR(255),
+        name VARCHAR(100),
+        age INT,
+        gender VARCHAR(20),
+        phone_number VARCHAR(50),
+        coins INT DEFAULT 0,
+        points INT DEFAULT 1,
+        matches_played INT DEFAULT 0,
+        wins INT DEFAULT 0,
+        owned_roles_json TEXT,
+        stats_wins INT DEFAULT 0,
+        stats_losses INT DEFAULT 0,
+        stats_matches INT DEFAULT 0,
+        device_brand VARCHAR(255),
+        device_model VARCHAR(255),
+        device_os VARCHAR(255),
+        device_os_version TEXT,
+        app_version VARCHAR(255),
+        last_sync_timestamp BIGINT DEFAULT 0,
+        last_seen_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_issues (
+        id SERIAL PRIMARY KEY,
+        issue_id VARCHAR(64) UNIQUE,
+        severity VARCHAR(50) DEFAULT 'error',
+        title VARCHAR(255),
+        description TEXT,
+        message TEXT,
+        stack_trace TEXT,
+        page VARCHAR(255),
+        app_version VARCHAR(50),
+        device_info TEXT,
+        status VARCHAR(20) DEFAULT 'open',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('[DB] PostgreSQL tables ready (player_profiles, app_issues).');
+  } catch (err) {
+    console.warn('[DB PG Migration]', err.message);
+  }
+}
+
+async function runMysqlMigrations() {
   if (!pool || !dbConnected) return;
 
   const migrationsDir = path.join(__dirname, 'migrations');
@@ -115,9 +198,7 @@ async function runMigrations() {
     let newlyAppliedCount = 0;
 
     for (const file of files) {
-      if (executedMigrations.has(file)) {
-        continue;
-      }
+      if (executedMigrations.has(file)) continue;
 
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf8');
@@ -150,6 +231,10 @@ function getPool() {
   return pool;
 }
 
+function getDbType() {
+  return dbType;
+}
+
 function isDbConnected() {
   return dbConnected;
 }
@@ -157,6 +242,8 @@ function isDbConnected() {
 module.exports = {
   initPool,
   testConnectionAndMigrate,
+  query,
   getPool,
+  getDbType,
   isDbConnected,
 };

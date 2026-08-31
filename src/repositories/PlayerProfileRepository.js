@@ -1,4 +1,4 @@
-const { getPool, isDbConnected } = require('../core/Database');
+const { query, isDbConnected } = require('../core/Database');
 
 const inMemoryProfiles = new Map();
 
@@ -7,11 +7,9 @@ class PlayerProfileRepository {
     if (!isDbConnected()) {
       return inMemoryProfiles.get(playerId) || null;
     }
-    const pool = getPool();
-    if (!pool) return inMemoryProfiles.get(playerId) || null;
 
     try {
-      const [rows] = await pool.query('SELECT * FROM player_profiles WHERE player_id = ?', [playerId]);
+      const [rows] = await query('SELECT * FROM player_profiles WHERE player_id = ?', [playerId]);
       if (rows.length === 0) return null;
 
       const r = rows[0];
@@ -51,8 +49,6 @@ class PlayerProfileRepository {
     inMemoryProfiles.set(playerId, inMemoryItem);
 
     if (!isDbConnected()) return inMemoryItem;
-    const pool = getPool();
-    if (!pool) return inMemoryItem;
 
     try {
       const existing = await this.findById(playerId);
@@ -62,7 +58,7 @@ class PlayerProfileRepository {
           INSERT INTO player_profiles (player_id, nickname, coins, owned_roles_json, stats_wins, stats_losses, stats_matches, last_seen_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, NOW());
         `;
-        await pool.query(sql, [
+        await query(sql, [
           playerId,
           nickname || 'Player',
           coins,
@@ -87,7 +83,7 @@ class PlayerProfileRepository {
         SET nickname = ?, coins = ?, owned_roles_json = ?, stats_wins = ?, stats_losses = ?, stats_matches = ?, last_seen_at = NOW()
         WHERE player_id = ?;
       `;
-      await pool.query(updateSql, [
+      await query(updateSql, [
         nickname || existing.nickname,
         reconciledCoins,
         JSON.stringify(mergedRoles),

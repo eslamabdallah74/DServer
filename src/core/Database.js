@@ -1,8 +1,10 @@
-const { initPool, testConnectionAndMigrate, getPool, isDbConnected } = require('../../db');
+const { initPool, testConnectionAndMigrate, query, getPool, getDbType, isDbConnected } = require('../../db');
 
 module.exports = {
   initPool,
   testConnectionAndMigrate,
+  query,
   getPool,
+  getDbType,
   isDbConnected,
 };
