@@ -303,8 +303,34 @@ async function runMysqlMigrations() {
     if (newlyAppliedCount === 0) {
       console.log('[DB] Database schema is up to date.');
     }
+    await seedDefaultAdminUser();
   } catch (err) {
     console.warn(`[DB Migration Error]: ${err.message}`);
+  }
+}
+
+async function seedDefaultAdminUser() {
+  const adminUsername = process.env.ADMIN_USERNAME || 'eslam@deceit74';
+  const adminEmail = process.env.ADMIN_EMAIL || 'eslam@deceit';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'deceit2026';
+
+  if (!adminUsername || !adminPassword) return;
+
+  try {
+    const authService = require('../auth/service');
+    const existing = await authService.findUserByUsername(adminUsername);
+    if (!existing) {
+      await authService.createUser({
+        username: adminUsername,
+        email: adminEmail,
+        password: adminPassword,
+        role: 'admin',
+        coins: 1000,
+      });
+      console.log(`[DB Seed] ✅ Seeded Admin User "${adminUsername}" (${adminEmail})`);
+    }
+  } catch (err) {
+    console.warn('[DB Seed Notice]:', err.message);
   }
 }
 
