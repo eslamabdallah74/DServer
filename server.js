@@ -551,17 +551,19 @@ server.on('error', (err) => {
   }
 });
 
-server.listen(BIND_PORT, () => {
-  console.log('=================================================');
-  console.log('  Deceit Online — Authoritative Server v2 (HARDENED)');
-  console.log(`  Listening on: ${BIND_PORT}`);
-  console.log('=================================================');
+if (!process.env.VERCEL) {
+  server.listen(BIND_PORT, () => {
+    console.log('=================================================');
+    console.log('  Deceit Online — Authoritative Server v2 (HARDENED)');
+    console.log(`  Listening on: ${BIND_PORT}`);
+    console.log('=================================================');
 
-  // Trigger DB connection & migrations asynchronously after HTTP server is bound
-  testConnectionAndMigrate().catch(err => {
-    console.warn('[DB] Non-fatal background migration error:', err.message);
+    // Trigger DB connection & migrations asynchronously after HTTP server is bound
+    testConnectionAndMigrate().catch(err => {
+      console.warn('[DB] Non-fatal background migration error:', err.message);
+    });
   });
-});
+}
 
 module.exports = app;
 module.exports.server = server;
