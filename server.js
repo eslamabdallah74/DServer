@@ -198,9 +198,10 @@ io.on('connection', socket => {
   }
 
   // ── 1. Create Room ──────────────────────────────────────────────────────────
-  socket.on('c_create_room', ({ nickname, settings } = {}) => {
+  socket.on('c_create_room', async ({ nickname, settings } = {}) => {
     try {
       const { room, hostPlayer, reconnectToken } = roomManager.createRoom(nickname, settings || {});
+      await roomManager.saveRoomDb(room);
       roomManager.bindSocket(room.roomCode, hostPlayer.playerId, socket.id);
       socket.join(room.roomCode);
 
