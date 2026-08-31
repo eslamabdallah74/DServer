@@ -67,12 +67,77 @@ class RoomManager {
     };
 
     this.rooms.set(roomCode, room);
+    this.saveRoomDb(room);
     return { room, hostPlayer, reconnectToken };
+  }
+
+  async saveRoomDb(room) {
+    if (!room || !room.roomCode) return;
+    try {
+      const { isDbConnected, query, getDbType } = require('./db');
+      if (!isDbConnected()) return;
+      const serializableRoom = {
+        ...room,
+        nightActions: Object.fromEntries(room.nightActions || []),
+        votes: Object.fromEntries(room.votes || []),
+        timerInterval: null,
+        phaseCallback: null,
+      };
+      const jsonStr = JSON.stringify(serializableRoom);
+      if (getDbType() === 'pg') {
+        await query(
+          'INSERT INTO active_rooms (room_code, room_data, last_activity_at) VALUES (?, ?, NOW()) ON CONFLICT (room_code) DO UPDATE SET room_data = EXCLUDED.room_data, last_activity_at = NOW()',
+          [room.roomCode, jsonStr]
+        );
+      } else {
+        await query(
+          'INSERT INTO active_rooms (room_code, room_data, last_activity_at) VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE room_data = VALUES(room_data), last_activity_at = NOW()',
+          [room.roomCode, jsonStr]
+        );
+      }
+    } catch (e) {
+      console.warn(`[RoomManager DB Save Error ${room.roomCode}]:`, e.message);
+    }
+  }
+
+  async loadRoomDb(roomCode) {
+    if (!roomCode) return null;
+    const code = roomCode.trim().toUpperCase();
+    if (this.rooms.has(code)) return this.rooms.get(code);
+
+    try {
+      const { isDbConnected, query } = require('./db');
+      if (!isDbConnected()) return null;
+      const [rows] = await query('SELECT room_data FROM active_rooms WHERE room_code = ?', [code]);
+      if (rows && rows.length > 0) {
+        const rawData = typeof rows[0].room_data === 'string' ? JSON.parse(rows[0].room_data) : rows[0].room_data;
+        rawData.nightActions = new Map(Object.entries(rawData.nightActions || {}));
+        rawData.votes = new Map(Object.entries(rawData.votes || {}));
+        this.rooms.set(code, rawData);
+        console.log(`[RoomManager DB Load] Loaded room ${code} from DB into memory.`);
+        return rawData;
+      }
+    } catch (e) {
+      console.warn(`[RoomManager DB Load Error ${code}]:`, e.message);
+    }
+    return null;
+  }
+
+  async deleteRoomDb(roomCode) {
+    if (!roomCode) return;
+    try {
+      const { isDbConnected, query } = require('./db');
+      if (!isDbConnected()) return;
+      await query('DELETE FROM active_rooms WHERE room_code = ?', [roomCode.trim().toUpperCase()]);
+    } catch (e) {
+      console.warn(`[RoomManager DB Delete Error ${roomCode}]:`, e.message);
+    }
   }
 
   getRoom(roomCode) {
     if (!roomCode || typeof roomCode !== 'string') return null;
-    const room = this.rooms.get(roomCode.trim().toUpperCase());
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
     if (room) {
       room.lastActivityAt = Date.now();
     }

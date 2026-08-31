@@ -216,6 +216,14 @@ async function runPgMigrations() {
       );
     `);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS active_rooms (
+        room_code VARCHAR(10) PRIMARY KEY,
+        room_data JSONB NOT NULL,
+        last_activity_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS app_issues (
         id SERIAL PRIMARY KEY,
         issue_id VARCHAR(64) UNIQUE,
