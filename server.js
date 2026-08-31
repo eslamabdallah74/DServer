@@ -1,5 +1,14 @@
 require('dotenv').config();
 
+// Global Crash Protection — Prevents cPanel Phusion Passenger Process Loop Crashes
+process.on('uncaughtException', (err) => {
+  console.error('[CRITICAL] Uncaught Exception:', err.stack || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRITICAL] Unhandled Rejection:', reason);
+});
+
 const express  = require('express');
 const http     = require('http');
 const path     = require('path');
@@ -511,39 +520,39 @@ io.on('connection', socket => {
   });
 });
 
-// Self-keepalive pulse to prevent cPanel / Passenger idle shutdown
-const keepAliveTimer = setInterval(() => {
-  try {
-    const portNum = parseInt(PORT, 10);
-    if (!isNaN(portNum)) {
-      http.get(`http://127.0.0.1:${portNum}/api/status`, () => {}).on('error', () => {});
-    }
-  } catch (e) {}
-}, 45_000);
-
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
 function gracefulShutdown(signal) {
   console.log(`[Shutdown] Received ${signal}. Closing server gracefully...`);
-  clearInterval(keepAliveTimer);
   roomManager.stopCleanupWorker();
 
-  io.close(() => {
-    server.close(() => {
-      console.log('[Shutdown] Server closed cleanly.');
-      process.exit(0);
+  try {
+    io.close(() => {
+      server.close(() => {
+        console.log('[Shutdown] Server closed cleanly.');
+        process.exit(0);
+      });
     });
-  });
+  } catch (err) {
+    process.exit(0);
+  }
 }
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
-server.listen(PORT, () => {
+// Start server on process.env.PORT or 3001 (supports Phusion Passenger Unix domain socket)
+const BIND_PORT = process.env.PORT || 3001;
+
+server.listen(BIND_PORT, () => {
   console.log('=================================================');
   console.log('  Deceit Online — Authoritative Server v2 (HARDENED)');
-  console.log(`  Listening on: ${PORT}`);
+  console.log(`  Listening on: ${BIND_PORT}`);
   console.log('=================================================');
+
+  // Trigger DB connection & migrations asynchronously after HTTP server is bound
+  testConnectionAndMigrate().catch(err => {
+    console.warn('[DB] Non-fatal background migration error:', err.message);
+  });
 });
 
-// Export server for cPanel Phusion Passenger compatibility
 module.exports = server;

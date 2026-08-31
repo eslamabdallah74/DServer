@@ -4,6 +4,7 @@ const path = require('path');
 
 let pool = null;
 let dbConnected = false;
+let isMigrating = false;
 
 function initPool() {
   const host = process.env.DB_HOST || '127.0.0.1';
@@ -13,7 +14,7 @@ function initPool() {
   const database = process.env.DB_NAME || 'deceit_db';
 
   if (!process.env.DB_HOST && !process.env.DB_NAME) {
-    console.log('[DB] No DB_HOST or DB_NAME configured in environment. Database features will be offline.');
+    console.log('[DB] No DB_HOST or DB_NAME configured in environment. Database features will run offline/mock mode.');
     return null;
   }
 
@@ -27,6 +28,7 @@ function initPool() {
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
+      connectTimeout: 5000,
       idleTimeout: 60000,
     });
 
@@ -42,42 +44,54 @@ function initPool() {
 
 async function ensureDatabaseExists(host, port, user, password, database) {
   try {
-    const tempConn = await mysql.createConnection({ host, port, user, password });
+    const tempConn = await mysql.createConnection({
+      host,
+      port,
+      user,
+      password,
+      connectTimeout: 4000,
+    });
     await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\`;`);
     await tempConn.end();
   } catch (err) {
-    // Suppress if creation fails (database may already exist or user lacks CREATE DB privilege)
+    // Suppress database creation failure (user might not have privilege)
   }
 }
 
 async function testConnectionAndMigrate() {
-  const host = process.env.DB_HOST || '127.0.0.1';
-  const port = parseInt(process.env.DB_PORT || '3306', 10);
-  const user = process.env.DB_USER || 'root';
-  const password = process.env.DB_PASSWORD || '';
-  const database = process.env.DB_NAME || 'deceit_db';
-
-  await ensureDatabaseExists(host, port, user, password, database);
-
-  if (!pool) initPool();
-  if (!pool) {
-    dbConnected = false;
-    return false;
-  }
+  if (isMigrating) return dbConnected;
+  isMigrating = true;
 
   try {
+    const host = process.env.DB_HOST || '127.0.0.1';
+    const port = parseInt(process.env.DB_PORT || '3306', 10);
+    const user = process.env.DB_USER || 'root';
+    const password = process.env.DB_PASSWORD || '';
+    const database = process.env.DB_NAME || 'deceit_db';
+
+    await ensureDatabaseExists(host, port, user, password, database);
+
+    if (!pool) initPool();
+    if (!pool) {
+      dbConnected = false;
+      isMigrating = false;
+      return false;
+    }
+
     const conn = await pool.getConnection();
     console.log(`[DB] ✅ Successfully connected to MySQL database "${database}".`);
     conn.release();
     dbConnected = true;
 
     await runMigrations();
-    return true;
   } catch (err) {
-    console.warn(`[DB] ⚠️ MySQL connection check failed: ${err.message}. Auth & Admin APIs will return 503.`);
+    console.warn(`[DB] ⚠️ MySQL connection check failed: ${err.message}. Server running gracefully without DB.`);
     dbConnected = false;
-    return false;
+  } finally {
+    isMigrating = false;
   }
+
+  return dbConnected;
 }
 
 async function runMigrations() {
@@ -87,7 +101,6 @@ async function runMigrations() {
   if (!fs.existsSync(migrationsDir)) return;
 
   try {
-    // Ensure migrations tracking table exists
     await pool.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         name VARCHAR(255) PRIMARY KEY,
@@ -95,7 +108,6 @@ async function runMigrations() {
       );
     `);
 
-    // Fetch list of already executed migrations
     const [rows] = await pool.query('SELECT name FROM schema_migrations');
     const executedMigrations = new Set(rows.map(r => r.name));
 
@@ -104,7 +116,7 @@ async function runMigrations() {
 
     for (const file of files) {
       if (executedMigrations.has(file)) {
-        continue; // Already applied previously, skip execution and output
+        continue;
       }
 
       const filePath = path.join(migrationsDir, file);
@@ -118,7 +130,6 @@ async function runMigrations() {
           newlyAppliedCount++;
         } catch (err) {
           if (err.code === 'ER_DUP_FIELDNAME' || err.message.includes('Duplicate column')) {
-            // Column already exists, record as applied
             await pool.query('INSERT IGNORE INTO schema_migrations (name) VALUES (?)', [file]);
           } else {
             console.warn(`[DB Migration Warning] ${file}: ${err.message}`);
