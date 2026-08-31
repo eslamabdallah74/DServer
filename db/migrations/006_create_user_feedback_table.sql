@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS user_feedback (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  feedback_id VARCHAR(64) NOT NULL UNIQUE,
+  rating INT NOT NULL DEFAULT 5,
+  comment TEXT NULL,
+  category VARCHAR(50) NULL,
+  contact_email VARCHAR(100) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

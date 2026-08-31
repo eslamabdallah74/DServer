@@ -1,2 +1,539 @@
-const server = require('./src/index.js');
+require('dotenv').config();
+
+const express  = require('express');
+const http     = require('http');
+const path     = require('path');
+const { Server } = require('socket.io');
+const cors     = require('cors');
+const cookieParser = require('cookie-parser');
+
+const { testConnectionAndMigrate, isDbConnected } = require('./db');
+const authRoutes  = require('./routes/authRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const syncRoutes  = require('./routes/syncRoutes');
+const { sanitizeInput, isValidRoomCode, isValidPlayerId } = require('./sanitizer');
+
+const roomManager  = require('./roomManager');
+const chatEngine   = require('./chatEngine');
+const { assignRoles, startPhase, advanceMatchLoop, broadcastSanitizedRoomSnapshot } = require('./gameEngine');
+
+const { getDashboardHtml } = require('./dashboard');
+
+const app = express();
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(cookieParser());
+
+// Strip leading /server prefix if running behind cPanel / Phusion Passenger subpath
+app.use((req, res, next) => {
+  if (req.url.startsWith('/server/')) {
+    req.url = req.url.substring(7);
+  } else if (req.url === '/server') {
+    req.url = '/';
+  }
+  next();
+});
+
+// Serve Web Admin Dashboard static files
+app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+
+// Mount API routes (both standard and /server subpath for cPanel Passenger)
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/players', syncRoutes);
+app.use('/api/issues', syncRoutes);
+app.use('/api/feedback', syncRoutes);
+app.use('/api/stats', syncRoutes);
+
+app.use('/server/api/auth', authRoutes);
+app.use('/server/api/admin', adminRoutes);
+app.use('/server/api/sync', syncRoutes);
+app.use('/server/api/players', syncRoutes);
+app.use('/server/api/issues', syncRoutes);
+app.use('/server/api/feedback', syncRoutes);
+app.use('/server/api/stats', syncRoutes);
+
+
+const startTime = Date.now();
+
+function getStatusPayload() {
+  const rooms = [];
+  let totalPlayersCount = 0;
+
+  roomManager.rooms.forEach(r => {
+    const connected = r.players.filter(p => p.isConnected).length;
+    totalPlayersCount += connected;
+    rooms.push({
+      roomCode:  r.roomCode,
+      phase:     r.phase,
+      round:     r.round,
+      players:   r.players.length,
+      connected,
+    });
+  });
+
+  const uptimeSeconds = (Date.now() - startTime) / 1000;
+  const formatUptime = (sec) => {
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    const secs = Math.floor(sec % 60);
+    return `${hrs}h ${mins}m ${secs}s`;
+  };
+
+  return {
+    status: 'ok',
+    dbConnected: isDbConnected(),
+    activeRooms: roomManager.rooms.size,
+    totalPlayers: totalPlayersCount,
+    uptimeSeconds,
+    uptime: formatUptime(uptimeSeconds),
+    rooms,
+  };
+}
+
+// Redirect / to /admin/login.html or /admin/dashboard.html
+app.get('/', (req, res) => {
+  res.redirect('/admin/login.html');
+});
+
+// ─── Health check endpoint (HTML by default, JSON if requested) ────────────────
+app.get('/health', (req, res) => {
+  if (req.query.json === '1' || req.headers.accept?.includes('application/json')) {
+    return res.json(getStatusPayload());
+  }
+  const payload = getStatusPayload();
+  const html = getDashboardHtml({
+    activeRoomsCount: payload.activeRooms,
+    totalPlayersCount: payload.totalPlayers,
+    rooms: payload.rooms,
+    uptimeSeconds: payload.uptimeSeconds,
+  });
+  res.send(html);
+});
+
+let latestBroadcast = null;
+
+function setLatestBroadcast(b) {
+  latestBroadcast = b;
+}
+
+function getLatestBroadcast() {
+  return latestBroadcast;
+}
+
+app.set('setLatestBroadcast', setLatestBroadcast);
+app.set('getLatestBroadcast', getLatestBroadcast);
+
+app.get('/api/announcement', (req, res) => {
+  res.json({ announcement: latestBroadcast });
+});
+
+// ─── Status JSON API (for dashboard auto-refresh) ────────────────────────────
+app.get('/api/status', (req, res) => {
+  res.json(getStatusPayload());
+});
+
+const server = http.createServer(app);
+const io     = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  pingTimeout:  20000,
+  pingInterval: 10000,
+});
+
+app.set('io', io);
+
+// Test database connection and apply migrations on boot
+testConnectionAndMigrate().then(connected => {
+  if (connected) {
+    console.log('[Server Boot] MySQL Database & Migrations Ready.');
+  } else {
+    console.log('[Server Boot] Running in Memory-Only Mode for Game Rooms. (MySQL unavailable)');
+  }
+}).catch(err => {
+  console.error('[Server Boot Error]:', err.message);
+});
+
+const PORT = process.env.PORT || 3001;
+
+// ─── Socket.IO event handlers ─────────────────────────────────────────────────
+io.on('connection', socket => {
+  console.log(`[+] Socket: ${socket.id}`);
+
+  // Send latest persistent broadcast to newly connected client
+  if (latestBroadcast) {
+    socket.emit('s_system_broadcast', latestBroadcast);
+  }
+
+  // ── 1. Create Room ──────────────────────────────────────────────────────────
+  socket.on('c_create_room', ({ nickname, settings } = {}) => {
+    try {
+      const { room, hostPlayer, reconnectToken } = roomManager.createRoom(nickname, settings || {});
+      roomManager.bindSocket(room.roomCode, hostPlayer.playerId, socket.id);
+      socket.join(room.roomCode);
+
+      socket.emit('s_create_room_response', {
+        success:        true,
+        roomCode:       room.roomCode,
+        playerId:       hostPlayer.playerId,
+        reconnectToken: reconnectToken,
+      });
+
+      broadcastSanitizedRoomSnapshot(io, room);
+      console.log(`[Room ${room.roomCode}] Created by "${nickname}"`);
+    } catch (err) {
+      console.error('[c_create_room] Error:', err);
+      socket.emit('s_error', { code: 'CREATE_FAILED', message: 'فشل إنشاء الغرفة' });
+    }
+  });
+
+  // ── 1.5 Add Bot ─────────────────────────────────────────────────────────────
+  socket.on('c_add_bot', ({ roomCode, playerId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+    
+    // Only host can add bots
+    const host = room.players.find(p => p.isHost);
+    if (!host || host.playerId !== playerId) return;
+
+    const res = roomManager.addBot(roomCode);
+    if (res.error) {
+      const messages = {
+        ROOM_NOT_FOUND:      'الغرفة غير موجودة',
+        GAME_ALREADY_STARTED:'اللعبة بدأت بالفعل',
+        ROOM_FULL:           'الغرفة ممتلئة',
+      };
+      socket.emit('s_error', { code: res.error, message: messages[res.error] || 'تعذر إضافة بوت' });
+      return;
+    }
+
+    // Broadcast updated room state
+    broadcastSanitizedRoomSnapshot(io, res.room);
+  });
+
+  // ── 1.6 Remove Bot ──────────────────────────────────────────────────────────
+  socket.on('c_remove_bot', ({ roomCode, playerId, botPlayerId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+    
+    // Only host can remove bots
+    const host = room.players.find(p => p.isHost);
+    if (!host || host.playerId !== playerId) return;
+
+    const res = roomManager.removeBot(roomCode, botPlayerId);
+    if (res.error) {
+      // Ignore errors silently for remove
+      return;
+    }
+
+    // Broadcast updated room state
+    broadcastSanitizedRoomSnapshot(io, res.room);
+  });
+
+  // ── 2. Join Room ────────────────────────────────────────────────────────────
+  socket.on('c_join_room', ({ roomCode, nickname } = {}) => {
+    const res = roomManager.joinRoom(roomCode, nickname);
+    if (res.error) {
+      const messages = {
+        ROOM_NOT_FOUND:      'الغرفة غير موجودة',
+        GAME_ALREADY_STARTED:'اللعبة بدأت بالفعل',
+        ROOM_FULL:           'الغرفة ممتلئة',
+      };
+      socket.emit('s_error', { code: res.error, message: messages[res.error] || 'تعذر الانضمام' });
+      return;
+    }
+
+    const { room, player, reconnectToken } = res;
+    roomManager.bindSocket(room.roomCode, player.playerId, socket.id);
+    socket.join(room.roomCode);
+
+    socket.emit('s_join_room_response', {
+      success:        true,
+      roomCode:       room.roomCode,
+      playerId:       player.playerId,
+      reconnectToken: reconnectToken,
+    });
+
+    broadcastSanitizedRoomSnapshot(io, room);
+    console.log(`[Room ${room.roomCode}] "${nickname}" joined (${room.players.length} players)`);
+  });
+
+  // ── 3. Reconnect ────────────────────────────────────────────────────────────
+  socket.on('c_reconnect', ({ roomCode, reconnectToken } = {}) => {
+    const res = roomManager.reconnectPlayer(roomCode, reconnectToken, socket.id);
+    if (res.error) {
+      socket.emit('s_error', { code: res.error, message: 'انتهت جلسة إعادة الاتصال' });
+      return;
+    }
+
+    const { room, player } = res;
+    socket.join(room.roomCode);
+
+    socket.emit('s_reconnect_response', {
+      success:  true,
+      roomCode: room.roomCode,
+      playerId: player.playerId,
+    });
+
+    // Replay permitted chat history
+    const history = chatEngine.getPermittedHistory(room, player);
+    socket.emit('s_chat_history', { history });
+
+    broadcastSanitizedRoomSnapshot(io, room);
+    console.log(`[Room ${room.roomCode}] "${player.nickname}" reconnected`);
+  });
+
+  // ── 3.5. Update Settings (Host only) ─────────────────────────────────────────
+  socket.on('c_update_settings', ({ roomCode, playerId, settings } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+
+    if (room.hostPlayerId !== playerId) {
+      socket.emit('s_error', { code: 'NOT_HOST', message: 'فقط المضيف يمكنه تغيير الإعدادات' });
+      return;
+    }
+    if (room.phase !== 'LOBBY') {
+      socket.emit('s_error', { code: 'ALREADY_STARTED', message: 'لا يمكن تغيير الإعدادات بعد بدء اللعبة' });
+      return;
+    }
+
+    // Merge new settings with existing
+    if (settings && typeof settings === 'object') {
+      room.settings = { ...room.settings, ...settings };
+      broadcastSanitizedRoomSnapshot(io, room);
+      console.log(`[Room ${room.roomCode}] Settings updated by host:`, settings);
+    }
+  });
+
+  // ── 4. Start Game (Host only) ───────────────────────────────────────────────
+  socket.on('c_start_game', ({ roomCode, playerId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+
+    if (room.hostPlayerId !== playerId) {
+      socket.emit('s_error', { code: 'NOT_HOST', message: 'فقط المضيف يمكنه بدء اللعبة' });
+      return;
+    }
+    if (room.phase !== 'LOBBY') {
+      socket.emit('s_error', { code: 'ALREADY_STARTED', message: 'اللعبة بدأت بالفعل' });
+      return;
+    }
+    if (room.players.length < 5) {
+      socket.emit('s_error', { code: 'NOT_ENOUGH_PLAYERS', message: 'يلزم 5 لاعبين على الأقل لبدء اللعبة' });
+      return;
+    }
+
+    console.log(`[Room ${room.roomCode}] Starting game with ${room.players.length} players`);
+
+    // Assign roles
+    assignRoles(room);
+
+    // Emit private role card to each player
+    room.players.forEach(p => {
+      if (!p.socketId) return;
+
+      const shadowAllies = p.faction === 'shadow'
+        ? room.players
+            .filter(a => a.faction === 'shadow' && a.playerId !== p.playerId)
+            .map(a => ({ playerId: a.playerId, nickname: a.nickname, role: a.role }))
+        : [];
+
+      io.to(p.socketId).emit('s_role_assigned', {
+        role:         p.role,
+        faction:      p.faction,
+        shadowAllies: shadowAllies,
+      });
+    });
+
+    // ROLE_REVEAL (15s) → then Night 1
+    startPhase(io, room, 'ROLE_REVEAL', 15, () => {
+      advanceMatchLoop(io, room);
+    });
+  });
+
+  // ── 5. Submit Night Action ──────────────────────────────────────────────────
+  socket.on('c_submit_night_action', ({ roomCode, playerId, targetPlayerId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || room.phase !== 'NIGHT') return;
+
+    const actor = room.players.find(p => p.playerId === playerId);
+    if (!actor || !actor.isAlive) return;
+
+    // Record the action (override if submitted again)
+    room.nightActions.set(actor.playerId, {
+      actorPlayerId:  actor.playerId,
+      roleId:         actor.role,
+      targetPlayerId: targetPlayerId,
+      submittedAt:    Date.now(),
+    });
+    
+    actor.isReady = true;
+
+    socket.emit('s_night_action_accepted', { success: true, targetPlayerId });
+    console.log(`[Room ${room.roomCode}] Night action: ${actor.role} → ${targetPlayerId}`);
+    
+    broadcastSanitizedRoomSnapshot(io, room);
+    const { checkAllReady } = require('./gameEngine');
+    checkAllReady(room, io);
+  });
+
+  // ── 6. Complete Task ────────────────────────────────────────────────────────
+  socket.on('c_complete_task', ({ roomCode, playerId, taskId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || room.phase !== 'DAY') return;
+
+    const player = room.players.find(p => p.playerId === playerId);
+    if (!player || !player.isAlive) return;
+
+    player.completedTasks += 1;
+
+    const totalRequired  = room.players.filter(p => p.isAlive).length * 2;
+    const totalCompleted = room.players.reduce((sum, p) => sum + p.completedTasks, 0);
+
+    room.taskProgress = Math.min(1.0, totalCompleted / totalRequired);
+    broadcastSanitizedRoomSnapshot(io, room);
+
+    // If tasks hit 100%, kingdom wins immediately
+    if (room.taskProgress >= 1.0) {
+      const { evaluateVictory } = require('./victoryEngine');
+      const victory = evaluateVictory(room);
+      if (victory.isDecided) {
+        room.victoryOutcome = victory;
+        startPhase(io, room, 'GAME_OVER', 0, null);
+      }
+    }
+  });
+
+  // ── 7. Cast Vote ────────────────────────────────────────────────────────────
+  socket.on('c_cast_vote', ({ roomCode, playerId, targetPlayerId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || room.phase !== 'VOTING') return;
+
+    const voter = room.players.find(p => p.playerId === playerId);
+    if (!voter || !voter.isAlive) return;
+
+    // Can't vote for self
+    if (voter.playerId === targetPlayerId) {
+      socket.emit('s_error', { code: 'SELF_VOTE', message: 'لا يمكنك التصويت على نفسك' });
+      return;
+    }
+
+    const target = room.players.find(p => p.playerId === targetPlayerId);
+    if (!target || !target.isAlive) return;
+
+    room.votes.set(voter.playerId, targetPlayerId);
+    voter.isReady = true; // Auto-ready after voting
+    socket.emit('s_vote_accepted', { success: true, targetPlayerId });
+
+    // Broadcast vote count update so everyone can see progress
+    const voteTally = {};
+    room.votes.forEach((tid, vid) => {
+      voteTally[tid] = (voteTally[tid] || 0) + 1;
+    });
+    io.to(room.roomCode).emit('s_vote_update', { voteTally, totalVoters: room.players.filter(p => p.isAlive).length });
+    
+    broadcastSanitizedRoomSnapshot(io, room);
+    const { checkAllReady } = require('./gameEngine');
+    checkAllReady(room, io);
+  });
+  
+  // ── 7.5 Ready Status ────────────────────────────────────────────────────────
+  socket.on('c_player_ready', ({ roomCode, playerId } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+
+    const player = room.players.find(p => p.playerId === playerId);
+    if (!player || !player.isAlive) return;
+
+    player.isReady = true;
+    
+    broadcastSanitizedRoomSnapshot(io, room);
+    const { checkAllReady } = require('./gameEngine');
+    checkAllReady(room, io);
+  });
+
+  // ── 8. Send Chat ────────────────────────────────────────────────────────────
+  socket.on('c_send_chat', ({ roomCode, playerId, text } = {}) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+
+    const player = room.players.find(p => p.playerId === playerId);
+    if (!player) return;
+
+    const result = chatEngine.processMessage(io, room, player, text);
+    if (result.error) {
+      const messages = {
+        RATE_LIMIT_EXCEEDED: 'إرسال سريع جداً — انتظر لحظة',
+        PLAYER_SILENCED:     'أنت صامت ولا يمكنك الكلام هذه الجولة',
+        CHAT_NOT_PERMITTED:  'الدردشة غير متاحة في هذه المرحلة',
+        EMPTY_MESSAGE:       'الرسالة فارغة',
+      };
+      socket.emit('s_error', { code: result.error, message: messages[result.error] || 'تعذر إرسال الرسالة' });
+    }
+  });
+
+  // ── 8.5 Leave Room ─────────────────────────────────────────────────────────
+  socket.on('c_leave_room', ({ roomCode, playerId } = {}) => {
+    const res = roomManager.leaveRoom(roomCode, playerId);
+    socket.leave(roomCode);
+    if (!res.error && !res.roomDestroyed) {
+      broadcastSanitizedRoomSnapshot(io, res.room);
+    }
+  });
+
+  // ── 9. Disconnect ───────────────────────────────────────────────────────────
+  socket.on('disconnect', reason => {
+    console.log(`[-] Socket: ${socket.id} (${reason})`);
+    chatEngine.cleanupSocket(socket.id);
+
+    roomManager.rooms.forEach((room, roomCode) => {
+      const player = room.players.find(p => p.socketId === socket.id);
+      if (player) {
+        const res = roomManager.handleDisconnect(roomCode, player.playerId, (r, p) => {
+          console.log(`[Room ${r.roomCode}] "${p.nickname}" disconnect expired`);
+          broadcastSanitizedRoomSnapshot(io, r);
+        });
+        if (!res.roomDestroyed) {
+          broadcastSanitizedRoomSnapshot(io, room);
+        }
+      }
+    });
+  });
+});
+
+// Self-keepalive pulse to prevent cPanel / Passenger idle shutdown
+const keepAliveTimer = setInterval(() => {
+  try {
+    const portNum = parseInt(PORT, 10);
+    if (!isNaN(portNum)) {
+      http.get(`http://127.0.0.1:${portNum}/api/status`, () => {}).on('error', () => {});
+    }
+  } catch (e) {}
+}, 45_000);
+
+// ─── Graceful Shutdown ────────────────────────────────────────────────────────
+function gracefulShutdown(signal) {
+  console.log(`[Shutdown] Received ${signal}. Closing server gracefully...`);
+  clearInterval(keepAliveTimer);
+  roomManager.stopCleanupWorker();
+
+  io.close(() => {
+    server.close(() => {
+      console.log('[Shutdown] Server closed cleanly.');
+      process.exit(0);
+    });
+  });
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+
+server.listen(PORT, () => {
+  console.log('=================================================');
+  console.log('  Deceit Online — Authoritative Server v2 (HARDENED)');
+  console.log(`  Listening on: ${PORT}`);
+  console.log('=================================================');
+});
+
+// Export server for cPanel Phusion Passenger compatibility
 module.exports = server;

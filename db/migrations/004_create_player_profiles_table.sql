@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS player_profiles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  player_id VARCHAR(64) NOT NULL UNIQUE,
+  name VARCHAR(100) NULL,
+  age INT NULL,
+  gender VARCHAR(20) NULL,
+  phone_number VARCHAR(50) NULL,
+  coins INT NOT NULL DEFAULT 0,
+  points INT NOT NULL DEFAULT 1,
+  matches_played INT NOT NULL DEFAULT 0,
+  wins INT NOT NULL DEFAULT 0,
+  owned_roles JSON NULL,
+  device_brand VARCHAR(255) NULL,
+  device_model VARCHAR(255) NULL,
+  device_os VARCHAR(255) NULL,
+  device_os_version TEXT NULL,
+  app_version VARCHAR(255) NULL,
+  last_sync_timestamp BIGINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

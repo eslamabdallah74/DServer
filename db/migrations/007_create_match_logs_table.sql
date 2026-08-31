@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS match_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  match_id VARCHAR(64) NOT NULL UNIQUE,
+  player_count INT NOT NULL,
+  winner_team VARCHAR(50) NOT NULL,
+  roles_used JSON NULL,
+  duration_seconds INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

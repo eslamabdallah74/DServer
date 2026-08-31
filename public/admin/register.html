@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ديسيت — إنشاء حساب جديد</title>
+  <style>
+    :root {
+      --bg-deep: #0a0d1a;
+      --card-bg: #141a2e;
+      --gold: #d4af37;
+      --gold-glow: rgba(212, 175, 55, 0.25);
+      --crimson: #e63946;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: radial-gradient(circle at center, #1a2238 0%, var(--bg-deep) 100%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 20px var(--gold-glow);
+    }
+    h1 {
+      color: var(--gold);
+      text-align: center;
+      margin-bottom: 8px;
+      font-size: 24px;
+    }
+    p.subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .form-group {
+      margin-bottom: 18px;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      background: #0d1222;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border 0.2s;
+    }
+    input:focus { border-color: var(--gold); }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #d4af37, #b8860b);
+      border: none;
+      border-radius: 8px;
+      color: #0a0d1a;
+      font-weight: bold;
+      font-size: 15px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.1s, filter 0.2s;
+    }
+    button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .alert {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .alert-danger { background: rgba(230, 57, 70, 0.15); border: 1px solid var(--crimson); color: #ff8a8a; }
+    .alert-success { background: rgba(46, 139, 87, 0.15); border: 1px solid #2e8b57; color: #76e4a2; }
+    .footer-link {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .footer-link a { color: var(--gold); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>ديسيت — حساب جديد</h1>
+    <p class="subtitle">إنشاء حساب لاعب جديد</p>
+
+    <div id="alertBox" class="alert"></div>
+
+    <form id="registerForm">
+      <div class="form-group">
+        <label for="username">اسم المستخدم</label>
+        <input type="text" id="username" required placeholder="karim99">
+      </div>
+
+      <div class="form-group">
+        <label for="email">البريد الإلكتروني</label>
+        <input type="email" id="email" required placeholder="user@example.com">
+      </div>
+
+      <div class="form-group">
+        <label for="password">كلمة المرور (6 أحرف على الأقل)</label>
+        <input type="password" id="password" required minlength="6">
+      </div>
+
+      <button type="submit">تسجيل الحساب</button>
+    </form>
+
+    <div class="footer-link">
+      لديك حساب بالفعل؟ <a href="/admin/login.html">تسجيل الدخول</a>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const alertBox = document.getElementById('alertBox');
+      alertBox.style.display = 'none';
+
+      const username = document.getElementById('username').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          alertBox.className = 'alert alert-danger';
+          alertBox.textContent = data.message || 'فشل إنشاء الحساب';
+          alertBox.style.display = 'block';
+          return;
+        }
+
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = 'تم إنشاء الحساب بنجاح! جاري تحويلك...';
+        alertBox.style.display = 'block';
+
+        setTimeout(() => {
+          window.location.href = '/admin/login.html';
+        }, 1500);
+      } catch (err) {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'حدث خطأ في الاتصال بالسيرفر.';
+        alertBox.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

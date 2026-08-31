@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS app_issues (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  issue_id VARCHAR(64) NOT NULL UNIQUE,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  stack_trace TEXT NULL,
+  app_version VARCHAR(50) NULL,
+  device_info TEXT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'open',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

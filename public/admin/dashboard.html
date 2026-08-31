@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ديسيت أونلاين — لوحة التحكم والإدارة</title>
+  <style>
+    :root {
+      --bg-deep: #090c15;
+      --card-bg: #111625;
+      --border: rgba(255, 255, 255, 0.08);
+      --gold: #d4af37;
+      --crimson: #e63946;
+      --blue: #3b82f6;
+      --green: #10b981;
+      --purple: #8b5cf6;
+      --text: #f1f5f9;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg-deep); color: var(--text); padding-bottom: 50px; }
+    header {
+      background: #0d121f;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo-area { display: flex; align-items: center; gap: 12px; }
+    .logo-area h2 { color: var(--gold); font-size: 20px; }
+    .user-badge { background: rgba(212, 175, 55, 0.15); border: 1px solid var(--gold); color: var(--gold); padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    .btn-logout { background: #2d3748; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .btn-logout:hover { background: var(--crimson); }
+    
+    .container { max-width: 1300px; margin: 30px auto; padding: 0 20px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .stat-card h4 { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+    .stat-card .val { font-size: 28px; font-weight: bold; color: var(--gold); }
+
+    .section-title { font-size: 18px; color: var(--gold); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 30px; }
+
+    .broadcast-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .broadcast-box input {
+      flex: 1;
+      padding: 10px 14px;
+      background: #090c15;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    .broadcast-box input:focus { border-color: var(--gold); }
+
+    table { width: 100%; border-collapse: collapse; text-align: right; margin-top: 10px; font-size: 14px; }
+    th { background: #0c101c; color: var(--muted); padding: 12px; border-bottom: 1px solid var(--border); }
+    td { padding: 12px; border-bottom: 1px solid var(--border); }
+    tr:hover { background: rgba(255,255,255,0.02); }
+
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+    .badge-admin { background: rgba(212, 175, 55, 0.2); color: var(--gold); border: 1px solid var(--gold); }
+    .badge-player { background: rgba(59, 130, 246, 0.2); color: var(--blue); border: 1px solid var(--blue); }
+    .badge-banned { background: rgba(230, 57, 70, 0.2); color: var(--crimson); border: 1px solid var(--crimson); }
+
+    .btn-sm { padding: 5px 10px; border-radius: 4px; font-size: 12px; border: none; cursor: pointer; font-weight: bold; }
+    .btn-sm:disabled { opacity: 0.35; cursor: not-allowed; filter: grayscale(1); }
+    .btn-danger { background: var(--crimson); color: #fff; }
+    .btn-danger:hover:not(:disabled) { filter: brightness(1.1); }
+    .btn-action { background: #2d3748; color: #fff; margin-left: 4px; }
+    .btn-action:hover:not(:disabled) { background: var(--blue); }
+    .btn-success { background: var(--green); color: #000; margin-left: 4px; }
+    .btn-purple { background: var(--purple); color: #fff; margin-left: 4px; }
+
+    .search-bar { padding: 8px 14px; background: #090c15; border: 1px solid var(--border); color: #fff; border-radius: 6px; font-size: 13px; width: 250px; outline: none; }
+    .search-bar:focus { border-color: var(--gold); }
+
+    .player-chip { display: inline-flex; align-items: center; background: #1a2238; border: 1px solid var(--border); padding: 2px 8px; border-radius: 12px; font-size: 12px; margin: 2px; }
+    .player-chip .kick-btn { color: var(--crimson); margin-right: 6px; cursor: pointer; font-weight: bold; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000;
+    }
+    .modal {
+      background: var(--card-bg); border: 1px solid var(--gold); border-radius: 12px; padding: 24px; width: 90%; max-width: 450px;
+    }
+    .modal h3 { color: var(--gold); margin-bottom: 16px; }
+    .modal .form-group { margin-bottom: 14px; }
+    .modal label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
+    .modal input, .modal select { width: 100%; padding: 10px; background: #090c15; border: 1px solid var(--border); color: #fff; border-radius: 6px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-area">
+      <h2>👑 ديسيت أونلاين — التحكم الإداري</h2>
+      <span class="user-badge" id="adminEmailBadge">الأدمن</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">تسجيل الخروج</button>
+  </header>
+
+  <div class="container">
+
+    <!-- Stats Row -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h4>الغرف النشطة</h4>
+        <div class="val" id="statRooms">0</div>
+      </div>
+      <div class="stat-card">
+        <h4>اللاعبون المتصلون</h4>
+        <div class="val" id="statPlayers">0</div>
+      </div>
+      <div class="stat-card">
+        <h4>قاعدة البيانات (MySQL)</h4>
+        <div class="val" id="statDb" style="color: var(--green);">متصلة ✅</div>
+      </div>
+      <div class="stat-card">
+        <h4>وقت التشغيل (Uptime)</h4>
+        <div class="val" id="statUptime" style="font-size: 18px;">0h 0m</div>
+      </div>
+    </div>
+
+    <!-- Server Broadcast Banner Control -->
+    <div class="card">
+      <div class="section-title">
+        <span>📢 إرسال إعلان إذاعي شامل (Server-wide Broadcast)</span>
+      </div>
+      <div class="broadcast-box">
+        <input type="text" id="broadcastInput" placeholder="اكتب نص الإعلان الذي سيظهر لجميع اللاعبين فورياً...">
+        <button class="btn-sm btn-purple" style="padding: 10px 20px;" onclick="sendBroadcast()">بث الإعلان 📡</button>
+      </div>
+    </div>
+
+    <!-- Active Rooms Section -->
+    <div class="card">
+      <div class="section-title">
+        <span>🎮 مراقبة وتحكم الغرف النشطة (Live Rooms)</span>
+        <button class="btn-sm btn-action" onclick="fetchRooms()">تحديث 🔄</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>رمز الغرفة</th>
+            <th>المرحلة (Phase)</th>
+            <th>الجولة</th>
+            <th>اللاعبون</th>
+            <th>قائمة اللاعبين (طرد)</th>
+            <th>الإجراءات الإدارية</th>
+          </tr>
+        </thead>
+        <tbody id="roomsTable">
+          <tr><td colspan="6" style="text-align: center; color: var(--muted);">لا توجد غرف نشطة حالياً.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- User Management Section -->
+    <div class="card">
+      <div class="section-title">
+        <span>👥 إدارة الحسابات والصلاحيات</span>
+        <div style="display: flex; gap: 10px;">
+          <input type="text" id="userSearch" class="search-bar" placeholder="بحث باسم المستخدم أو البريد..." oninput="fetchUsers()">
+          <button class="btn-sm btn-success" onclick="openCreateUserModal()">+ إضافة حساب جديد</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>اسم المستخدم</th>
+            <th>البريد الإلكتروني</th>
+            <th>الرتبة</th>
+            <th>الحالة</th>
+            <th>العملات</th>
+            <th>الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody id="usersTable">
+          <tr><td colspan="7" style="text-align: center; color: var(--muted);">جاري تحميل الحسابات...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Audit Logs Section -->
+    <div class="card">
+      <div class="section-title">
+        <span>📜 سجل إجراءات المشرفين (Audit Logs)</span>
+        <button class="btn-sm btn-action" onclick="fetchAuditLogs()">تحديث 🔄</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>الأدمن</th>
+            <th>نوع الإجراء</th>
+            <th>الهدف</th>
+            <th>التفاصيل</th>
+            <th>التاريخ</th>
+          </tr>
+        </thead>
+        <tbody id="logsTable">
+          <tr><td colspan="6" style="text-align: center; color: var(--muted);">جاري تحميل السجلات...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Create User Modal -->
+  <div class="modal-overlay" id="createUserModal">
+    <div class="modal">
+      <h3>إنشاء حساب جديد</h3>
+      <div class="form-group">
+        <label>اسم المستخدم</label>
+        <input type="text" id="newUsername" required>
+      </div>
+      <div class="form-group">
+        <label>البريد الإلكتروني</label>
+        <input type="email" id="newEmail" required>
+      </div>
+      <div class="form-group">
+        <label>كلمة المرور</label>
+        <input type="password" id="newPassword" required minlength="6">
+      </div>
+      <div class="form-group">
+        <label>الرتبة</label>
+        <select id="newRole">
+          <option value="player">player (لاعب)</option>
+          <option value="admin">admin (مشرف)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>رصيد العملات الأولية</label>
+        <input type="number" id="newCoins" value="100" min="0">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-sm btn-action" onclick="closeCreateUserModal()">إلغاء</button>
+        <button class="btn-sm btn-success" onclick="submitCreateUser()">إنشاء الحساب</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentAdminUser = null;
+
+    // Global fetch interceptor for session expiry (401)
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+      const response = await originalFetch(...args);
+      if (response.status === 401 && !window.location.pathname.includes('login.html')) {
+        window.location.href = '/admin/login.html';
+      }
+      return response;
+    };
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        if (!res.ok || !data.user || data.user.role !== 'admin') {
+          window.location.href = '/admin/login.html';
+          return;
+        }
+        currentAdminUser = data.user;
+        document.getElementById('adminEmailBadge').textContent = `${data.user.username} (${data.user.email})`;
+      } catch (err) {
+        window.location.href = '/admin/login.html';
+      }
+    }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/admin/login.html';
+    }
+
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        document.getElementById('statRooms').textContent = data.activeRooms || 0;
+        document.getElementById('statPlayers').textContent = data.totalPlayers || 0;
+        document.getElementById('statUptime').textContent = data.uptime || '0m';
+      } catch (e) {}
+    }
+
+    async function sendBroadcast() {
+      const input = document.getElementById('broadcastInput');
+      const message = input.value.trim();
+      if (!message) return alert('يرجى كتابة نص الإعلان أولاً');
+
+      const res = await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      const data = await res.json();
+      alert(data.message);
+      if (res.ok) input.value = '';
+      fetchAuditLogs();
+    }
+
+    async function fetchRooms() {
+      try {
+        const res = await fetch('/api/admin/rooms');
+        const data = await res.json();
+        const tbody = document.getElementById('roomsTable');
+
+        if (!data.rooms || data.rooms.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted);">لا توجد غرف نشطة حالياً.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.rooms.map(r => {
+          const playerChips = r.players.map(p => 
+            `<span class="player-chip">
+              <span class="kick-btn" title="طرد اللاعب" onclick="kickPlayer('${r.roomCode}', '${p.playerId}')">✕</span>
+              ${p.nickname} ${p.isHost ? '👑' : ''} ${p.isBot ? '🤖' : ''}
+            </span>`
+          ).join('');
+
+          return `
+            <tr>
+              <td><strong>${r.roomCode}</strong></td>
+              <td><span class="badge badge-player">${r.phase}</span></td>
+              <td>${r.round}</td>
+              <td>${r.humanPlayers} بشر / ${r.botPlayers} بوت</td>
+              <td>${playerChips}</td>
+              <td>
+                ${r.phase === 'LOBBY' ? `<button class="btn-sm btn-purple" onclick="addBot('${r.roomCode}')">+ بوت 🤖</button>` : ''}
+                <button class="btn-sm btn-action" onclick="forceNextPhase('${r.roomCode}')">تخطي المرحلة ⏩</button>
+                <button class="btn-sm btn-danger" onclick="destroyRoom('${r.roomCode}')">إغلاق الغرفة 💣</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {}
+    }
+
+    async function addBot(roomCode) {
+      const res = await fetch(`/api/admin/rooms/${roomCode}/add-bot`, { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchRooms();
+      fetchAuditLogs();
+    }
+
+    async function forceNextPhase(roomCode) {
+      if (!confirm(`هل أنت تأكد من فورس الجولة/تخطي المرحلة في الغرفة ${roomCode}؟`)) return;
+      const res = await fetch(`/api/admin/rooms/${roomCode}/next-phase`, { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchRooms();
+      fetchAuditLogs();
+    }
+
+    async function fetchUsers() {
+      const search = document.getElementById('userSearch').value;
+      try {
+        const res = await fetch(`/api/admin/users?search=${encodeURIComponent(search)}`);
+        const data = await res.json();
+        const tbody = document.getElementById('usersTable');
+
+        if (!data.users || data.users.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted);">لم يتم العثور على حسابات.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.users.map(u => {
+          const isSelf = currentAdminUser && u.id === currentAdminUser.id;
+          const isBanned = Boolean(u.isBanned);
+
+          return `
+            <tr>
+              <td>${u.id}</td>
+              <td><strong>${u.username} ${isSelf ? ' (أنت)' : ''}</strong></td>
+              <td>${u.email}</td>
+              <td>
+                <span class="badge ${u.role === 'admin' ? 'badge-admin' : 'badge-player'}">${u.role}</span>
+              </td>
+              <td>
+                <span class="badge ${isBanned ? 'badge-banned' : 'badge-player'}">${isBanned ? 'مطرود/محظور 🚫' : 'نشط ✅'}</span>
+              </td>
+              <td>${u.coins} 🪙</td>
+              <td>
+                <button class="btn-sm btn-action" ${isSelf ? 'disabled title="لا يمكنك تغيير رتبة حسابك الشخصي"' : ''} onclick="toggleRole(${u.id}, '${u.role}')">تغيير الرتبة</button>
+                <button class="btn-sm btn-action" onclick="editCoins(${u.id}, ${u.coins})">تعديل العملات</button>
+                <button class="btn-sm btn-purple" onclick="resetPassword(${u.id})">كلمة المرور 🔑</button>
+                <button class="btn-sm ${isBanned ? 'btn-success' : 'btn-danger'}" ${isSelf ? 'disabled' : ''} onclick="toggleBan(${u.id}, ${isBanned})">${isBanned ? 'إلغاء الحظر 🔓' : 'حظر 🚫'}</button>
+                <button class="btn-sm btn-danger" ${isSelf ? 'disabled title="لا يمكنك حذف حسابك الشخصي"' : ''} onclick="deleteUser(${u.id})">حذف</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {}
+    }
+
+    async function fetchAuditLogs() {
+      try {
+        const res = await fetch('/api/admin/audit-logs');
+        const data = await res.json();
+        const tbody = document.getElementById('logsTable');
+
+        if (!data.logs || data.logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted);">لا توجد سجلات بعد.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.logs.map(l => `
+          <tr>
+            <td>${l.id}</td>
+            <td>${l.admin_email}</td>
+            <td><span class="badge badge-admin">${l.action_type}</span></td>
+            <td>${l.target_type}:${l.target_id}</td>
+            <td style="font-size: 12px; color: var(--muted);">${JSON.stringify(l.details)}</td>
+            <td>${new Date(l.created_at).toLocaleString('ar-EG')}</td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function destroyRoom(roomCode) {
+      if (!confirm(`هل أنت تأكد من تدمير وإغلاق الغرفة ${roomCode}؟`)) return;
+      const res = await fetch(`/api/admin/rooms/${roomCode}`, { method: 'DELETE' });
+      const data = await res.json();
+      alert(data.message);
+      fetchRooms();
+      fetchStats();
+      fetchAuditLogs();
+    }
+
+    async function kickPlayer(roomCode, playerId) {
+      if (!confirm(`هل أنت تأكد من طرد هذا اللاعب من الغرفة ${roomCode}؟`)) return;
+      const res = await fetch(`/api/admin/rooms/${roomCode}/players/${playerId}`, { method: 'DELETE' });
+      const data = await res.json();
+      alert(data.message);
+      fetchRooms();
+      fetchAuditLogs();
+    }
+
+    async function toggleRole(userId, currentRole) {
+      const newRole = currentRole === 'admin' ? 'player' : 'admin';
+      if (!confirm(`هل أنت تأكد من تغيير رتبة المستخدم إلى ${newRole}؟`)) return;
+      const res = await fetch(`/api/admin/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      alert(data.message || 'تم تحديث الرتبة');
+      fetchUsers();
+      fetchAuditLogs();
+    }
+
+    async function editCoins(userId, currentCoins) {
+      const input = prompt('أدخل عدد العملات الجديد:', currentCoins);
+      if (input === null) return;
+      const coins = parseInt(input, 10);
+      if (isNaN(coins) || coins < 0) return alert('عدد عملات غير صالح');
+
+      const res = await fetch(`/api/admin/users/${userId}/coins`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coins }),
+      });
+      const data = await res.json();
+      alert(data.message || 'تم تعديل العملات');
+      fetchUsers();
+      fetchAuditLogs();
+    }
+
+    async function toggleBan(userId, currentIsBanned) {
+      const actionText = currentIsBanned ? 'إلغاء حظر' : 'حظر';
+      if (!confirm(`هل أنت تأكد من ${actionText} هذا الحساب؟`)) return;
+
+      const res = await fetch(`/api/admin/users/${userId}/ban`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isBanned: !currentIsBanned }),
+      });
+      const data = await res.json();
+      alert(data.message || `تم ${actionText} الحساب بنجاح`);
+      fetchUsers();
+      fetchAuditLogs();
+    }
+
+    async function resetPassword(userId) {
+      const newPassword = prompt('أدخل كلمة المرور الجديدة (6 أحرف على الأقل):');
+      if (!newPassword) return;
+
+      const res = await fetch(`/api/admin/users/${userId}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword }),
+      });
+      const data = await res.json();
+      alert(data.message);
+      fetchAuditLogs();
+    }
+
+    async function deleteUser(userId) {
+      if (!confirm('هل أنت تأكد من حذف هذا الحساب نهائياً؟')) return;
+      const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      const data = await res.json();
+      alert(data.message);
+      fetchUsers();
+      fetchAuditLogs();
+    }
+
+    function openCreateUserModal() {
+      document.getElementById('createUserModal').style.display = 'flex';
+    }
+    function closeCreateUserModal() {
+      document.getElementById('createUserModal').style.display = 'none';
+    }
+
+    async function submitCreateUser() {
+      const username = document.getElementById('newUsername').value.trim();
+      const email = document.getElementById('newEmail').value.trim();
+      const password = document.getElementById('newPassword').value;
+      const role = document.getElementById('newRole').value;
+      const coins = parseInt(document.getElementById('newCoins').value, 10) || 0;
+
+      if (!username || !email || !password) return alert('جميع الحقول مطلوبة');
+
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password, role, coins }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.message || 'فشل إنشاء الحساب');
+
+      alert('تم إنشاء الحساب بنجاح!');
+      closeCreateUserModal();
+      fetchUsers();
+      fetchAuditLogs();
+    }
+
+    // Init
+    checkAuth().then(() => {
+      fetchStats();
+      fetchRooms();
+      fetchUsers();
+      fetchAuditLogs();
+    });
+
+    setInterval(() => {
+      fetchStats();
+      fetchRooms();
+    }, 5000);
+  </script>
+</body>
+</html>

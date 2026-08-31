@@ -1,0 +1,6 @@
+ALTER TABLE player_profiles
+  MODIFY COLUMN device_brand VARCHAR(255) NULL,
+  MODIFY COLUMN device_model VARCHAR(255) NULL,
+  MODIFY COLUMN device_os VARCHAR(255) NULL,
+  MODIFY COLUMN device_os_version TEXT NULL,
+  MODIFY COLUMN app_version VARCHAR(255) NULL;
