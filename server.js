@@ -45,8 +45,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve Web Admin Dashboard static files
+// Serve Web Admin Dashboard static files & explicit HTML fallback routes
 app.use(['/admin', '/server/admin'], express.static(path.join(__dirname, 'public/admin')));
+app.use(express.static(path.join(__dirname, 'public/admin')));
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get(['/admin/login', '/admin/login.html', '/server/admin/login.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/admin/login.html'));
+});
+
+app.get(['/admin/dashboard', '/admin/dashboard.html', '/server/admin/dashboard.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/admin/dashboard.html'));
+});
+
+app.get(['/admin/register', '/admin/register.html', '/server/admin/register.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/admin/register.html'));
+});
 
 // Mount API routes supporting both standard and /server subpath for cPanel Passenger
 const apiSyncPaths  = ['/api/sync', '/server/api/sync'];
