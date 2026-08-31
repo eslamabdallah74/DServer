@@ -100,9 +100,10 @@ function getStatusPayload() {
   };
 }
 
-// Redirect / to /admin/login.html or /admin/dashboard.html
+// Redirect / to /admin/login.html or /server/admin/login.html
 app.get('/', (req, res) => {
-  res.redirect('/admin/login.html');
+  const prefix = (req.originalUrl && req.originalUrl.startsWith('/server')) ? '/server' : '';
+  res.redirect(`${prefix}/admin/login.html`);
 });
 
 // ─── Health check endpoint (Cheap JSON) ───────────────────────────────────────
