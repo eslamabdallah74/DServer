@@ -57,9 +57,12 @@ function initPool() {
 // Unified query helper — same interface for both MySQL and Postgres
 // Returns [rows, result] regardless of driver
 async function query(sql, params = []) {
+  if (!pool) initPool();
   if (!pool) throw new Error('No database pool');
 
-  if (dbType === 'pg') {
+  const currentDbType = getDbType();
+
+  if (currentDbType === 'pg') {
     // Convert MySQL ? placeholders to Postgres $1, $2, ...
     let idx = 0;
     const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
@@ -77,7 +80,7 @@ async function query(sql, params = []) {
 }
 
 async function testConnectionAndMigrate() {
-  if (isMigrating) return dbConnected;
+  if (isMigrating) return isDbConnected();
   isMigrating = true;
 
   try {
@@ -88,7 +91,7 @@ async function testConnectionAndMigrate() {
       return false;
     }
 
-    if (dbType === 'pg') {
+    if (getDbType() === 'pg') {
       const client = await pool.connect();
       console.log('[DB] ✅ Connected to PostgreSQL.');
       client.release();
@@ -115,7 +118,7 @@ async function testConnectionAndMigrate() {
     isMigrating = false;
   }
 
-  return dbConnected;
+  return isDbConnected();
 }
 
 async function ensureDatabaseExists(host, port, user, password, database) {
