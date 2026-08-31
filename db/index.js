@@ -7,19 +7,31 @@ let dbConnected = false;
 let isMigrating = false;
 
 function initPool() {
+  const dbUrl = process.env.MYSQL_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+  if (dbUrl) {
+    try {
+      pool = mysql.createPool(dbUrl);
+      console.log('[DB] MySQL pool initialized from DATABASE_URL / MYSQL_URL');
+      return pool;
+    } catch (err) {
+      console.error('[DB] Failed to initialize pool from connection URL:', err.message);
+    }
+  }
+
   const host = process.env.DB_HOST || '127.0.0.1';
   const port = parseInt(process.env.DB_PORT || '3306', 10);
   const user = process.env.DB_USER || 'root';
   const password = process.env.DB_PASSWORD || '';
   const database = process.env.DB_NAME || 'deceit_db';
 
-  if (!process.env.DB_HOST && !process.env.DB_NAME) {
-    console.log('[DB] No DB_HOST or DB_NAME configured in environment. Database features will run offline/mock mode.');
+  if (!process.env.DB_HOST && !process.env.DB_NAME && !dbUrl) {
+    console.log('[DB] No DB_HOST, DB_NAME, or MYSQL_URL configured in environment. Running in-memory mode.');
     return null;
   }
 
   try {
-    pool = mysql.createPool({
+    const config = {
       host,
       port,
       user,
@@ -30,8 +42,13 @@ function initPool() {
       queueLimit: 0,
       connectTimeout: 5000,
       idleTimeout: 60000,
-    });
+    };
 
+    if (process.env.DB_SSL === 'true' || process.env.VERCEL) {
+      config.ssl = { rejectUnauthorized: false };
+    }
+
+    pool = mysql.createPool(config);
     console.log(`[DB] MySQL pool initialized (${host}:${port}/${database})`);
     return pool;
   } catch (err) {
