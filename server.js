@@ -137,6 +137,14 @@ app.get('/api/status', (req, res) => {
 });
 
 const server = http.createServer(app);
+
+// Prepend raw HTTP request listener so /server/socket.io is rewritten BEFORE Socket.IO engine.io inspects it
+server.prependListener('request', (req, res) => {
+  if (req.url && req.url.startsWith('/server/socket.io')) {
+    req.url = req.url.substring(7);
+  }
+});
+
 const io     = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
   pingTimeout:  20000,
