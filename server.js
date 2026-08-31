@@ -102,7 +102,8 @@ function getStatusPayload() {
 
 // Redirect / to /admin/login.html or /server/admin/login.html
 app.get('/', (req, res) => {
-  const prefix = (req.originalUrl && req.originalUrl.startsWith('/server')) ? '/server' : '';
+  const passengerBase = req.headers['x-passenger-base-uri'] || req.headers['x-forwarded-prefix'] || '';
+  const prefix = passengerBase || ((req.originalUrl && req.originalUrl.startsWith('/server')) ? '/server' : '');
   res.redirect(`${prefix}/admin/login.html`);
 });
 
