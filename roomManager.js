@@ -134,6 +134,19 @@ class RoomManager {
     }
   }
 
+  async getRoomAsync(roomCode) {
+    if (!roomCode || typeof roomCode !== 'string') return null;
+    const code = roomCode.trim().toUpperCase();
+    let room = this.rooms.get(code);
+    if (!room) {
+      room = await this.loadRoomDb(code);
+    }
+    if (room) {
+      room.lastActivityAt = Date.now();
+    }
+    return room || null;
+  }
+
   getRoom(roomCode) {
     if (!roomCode || typeof roomCode !== 'string') return null;
     const code = roomCode.trim().toUpperCase();
@@ -163,6 +176,7 @@ class RoomManager {
 
     room.players.push(player);
     room.lastActivityAt = Date.now();
+    this.saveRoomDb(room);
     return { room, player, reconnectToken };
   }
 
@@ -179,6 +193,7 @@ class RoomManager {
     const player   = _makePlayer(playerId, randomName, false, null, true);
     room.players.push(player);
     room.lastActivityAt = Date.now();
+    this.saveRoomDb(room);
     return { room, player };
   }
 
@@ -198,6 +213,7 @@ class RoomManager {
 
     room.players.splice(botIndex, 1);
     room.lastActivityAt = Date.now();
+    this.saveRoomDb(room);
     return { room };
   }
 
@@ -333,6 +349,7 @@ class RoomManager {
         }
       });
       this.rooms.delete(roomCode);
+      this.deleteRoomDb(roomCode);
       console.log(`[RoomManager] Room ${roomCode} destroyed and purged.`);
     }
   }

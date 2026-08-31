@@ -220,7 +220,8 @@ io.on('connection', socket => {
   });
 
   // ── 1.5 Add Bot ─────────────────────────────────────────────────────────────
-  socket.on('c_add_bot', ({ roomCode, playerId } = {}) => {
+  socket.on('c_add_bot', async ({ roomCode, playerId } = {}) => {
+    await roomManager.loadRoomDb(roomCode);
     const room = roomManager.getRoom(roomCode);
     if (!room) return;
     
@@ -244,7 +245,8 @@ io.on('connection', socket => {
   });
 
   // ── 1.6 Remove Bot ──────────────────────────────────────────────────────────
-  socket.on('c_remove_bot', ({ roomCode, playerId, botPlayerId } = {}) => {
+  socket.on('c_remove_bot', async ({ roomCode, playerId, botPlayerId } = {}) => {
+    await roomManager.loadRoomDb(roomCode);
     const room = roomManager.getRoom(roomCode);
     if (!room) return;
     
@@ -263,7 +265,8 @@ io.on('connection', socket => {
   });
 
   // ── 2. Join Room ────────────────────────────────────────────────────────────
-  socket.on('c_join_room', ({ roomCode, nickname } = {}) => {
+  socket.on('c_join_room', async ({ roomCode, nickname } = {}) => {
+    await roomManager.loadRoomDb(roomCode);
     const res = roomManager.joinRoom(roomCode, nickname);
     if (res.error) {
       const messages = {
@@ -291,7 +294,8 @@ io.on('connection', socket => {
   });
 
   // ── 3. Reconnect ────────────────────────────────────────────────────────────
-  socket.on('c_reconnect', ({ roomCode, reconnectToken } = {}) => {
+  socket.on('c_reconnect', async ({ roomCode, reconnectToken } = {}) => {
+    await roomManager.loadRoomDb(roomCode);
     const res = roomManager.reconnectPlayer(roomCode, reconnectToken, socket.id);
     if (res.error) {
       socket.emit('s_error', { code: res.error, message: 'انتهت جلسة إعادة الاتصال' });
