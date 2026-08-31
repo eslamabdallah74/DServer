@@ -71,38 +71,18 @@ apiRoomPaths.forEach(p => app.use(p, syncRoutes));
 const startTime = Date.now();
 
 function getStatusPayload() {
-  const rooms = [];
   let totalPlayersCount = 0;
-
   roomManager.rooms.forEach(r => {
-    const connected = r.players.filter(p => p.isConnected).length;
-    totalPlayersCount += connected;
-    rooms.push({
-      roomCode:  r.roomCode,
-      phase:     r.phase,
-      round:     r.round,
-      players:   r.players.length,
-      connected,
-    });
+    totalPlayersCount += r.players.filter(p => p.isConnected).length;
   });
 
-  const uptimeSeconds = (Date.now() - startTime) / 1000;
-  const formatUptime = (sec) => {
-    const hrs = Math.floor(sec / 3600);
-    const mins = Math.floor((sec % 3600) / 60);
-    const secs = Math.floor(sec % 60);
-    return `${hrs}h ${mins}m ${secs}s`;
-  };
+  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
 
   return {
     status: 'ok',
-    dbConnected: isDbConnected(),
-    dbType: getDbType(),
     activeRooms: roomManager.rooms.size,
     totalPlayers: totalPlayersCount,
     uptimeSeconds,
-    uptime: formatUptime(uptimeSeconds),
-    rooms,
   };
 }
 
@@ -313,6 +293,21 @@ io.on('connection', socket => {
       roomCode: room.roomCode,
       playerId: player.playerId,
     });
+
+    // Re-emit private role payload directly to caller socket on reconnect
+    if (player.role) {
+      const shadowAllies = player.faction === 'shadow'
+        ? room.players
+            .filter(a => a.faction === 'shadow' && a.playerId !== player.playerId)
+            .map(a => ({ playerId: a.playerId, nickname: a.nickname, role: a.role, isAlive: a.isAlive }))
+        : [];
+
+      socket.emit('s_role_assigned', {
+        role:         player.role,
+        faction:      player.faction,
+        shadowAllies: shadowAllies,
+      });
+    }
 
     // Replay permitted chat history
     const history = chatEngine.getPermittedHistory(room, player);

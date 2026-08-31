@@ -314,21 +314,15 @@ class RoomManager {
       return { roomDestroyed: true };
     }
 
-    // In active game, if 0 connected humans remain, set 30s grace window before destroying room
+    // Individual player 30s grace window (marks disconnect expired, but does NOT purge room)
     player.disconnectTimeout = setTimeout(() => {
       player.disconnectTimeout = null;
       const activeRoom = this.rooms.get(roomCode);
-      if (activeRoom) {
-        const currentConnectedHumans = activeRoom.players.filter(p => !p.isBot && p.isConnected).length;
-        if (currentConnectedHumans === 0) {
-          console.log(`[RoomManager] Room ${roomCode} destroyed after 30s: All human players disconnected.`);
-          this.removeRoom(roomCode);
-        } else if (onDisconnectExpired && !player.isConnected) {
-          try {
-            onDisconnectExpired(activeRoom, player);
-          } catch (e) {
-            console.error(`[Room ${roomCode}] Error in onDisconnectExpired:`, e);
-          }
+      if (activeRoom && onDisconnectExpired && !player.isConnected) {
+        try {
+          onDisconnectExpired(activeRoom, player);
+        } catch (e) {
+          console.error(`[Room ${roomCode}] Error in onDisconnectExpired:`, e);
         }
       }
     }, 30_000);
