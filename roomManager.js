@@ -22,9 +22,11 @@ class RoomManager {
   }
 
   createRoom(hostNickname, customSettings = {}) {
-    const roomCode       = this.generateRoomCode();
-    const hostPlayerId   = `p_${randomUUID().substring(0, 8)}`;
-    const reconnectToken = `token_${randomUUID()}`;
+    const crypto = require('crypto');
+    const roomCode           = this.generateRoomCode();
+    const hostPlayerId       = `p_${crypto.randomUUID().substring(0, 8)}`;
+    const rawReconnectToken  = crypto.randomBytes(32).toString('hex');
+    const tokenHash          = crypto.createHash('sha256').update(rawReconnectToken).digest('hex');
 
     const defaultSettings = {
       maxPlayers:           16,
@@ -37,7 +39,7 @@ class RoomManager {
       enabledRoleIds:       [],
     };
 
-    const hostPlayer = _makePlayer(hostPlayerId, hostNickname || 'Host', true, reconnectToken);
+    const hostPlayer = _makePlayer(hostPlayerId, hostNickname || 'Host', true, tokenHash);
     const now = Date.now();
 
     const room = {
@@ -68,7 +70,7 @@ class RoomManager {
 
     this.rooms.set(roomCode, room);
     this.saveRoomDb(room);
-    return { room, hostPlayer, reconnectToken };
+    return { room, hostPlayer, reconnectToken: rawReconnectToken };
   }
 
   async saveRoomDb(room) {
@@ -165,22 +167,26 @@ class RoomManager {
   }
 
   joinRoom(roomCode, nickname) {
+    const crypto = require('crypto');
     const room = this.getRoom(roomCode);
     if (!room)                                           return { error: 'ROOM_NOT_FOUND' };
     if (room.phase !== 'LOBBY')                          return { error: 'GAME_ALREADY_STARTED' };
     if (room.players.length >= room.settings.maxPlayers) return { error: 'ROOM_FULL' };
 
-    const playerId       = `p_${randomUUID().substring(0, 8)}`;
-    const reconnectToken = `token_${randomUUID()}`;
-    const player         = _makePlayer(playerId, nickname || `لاعب_${Math.floor(1000 + Math.random() * 9000)}`, false, reconnectToken);
+    const playerId          = `p_${crypto.randomUUID().substring(0, 8)}`;
+    const rawReconnectToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash         = crypto.createHash('sha256').update(rawReconnectToken).digest('hex');
+
+    const player = _makePlayer(playerId, nickname || `لاعب_${Math.floor(1000 + Math.random() * 9000)}`, false, tokenHash);
 
     room.players.push(player);
     room.lastActivityAt = Date.now();
     this.saveRoomDb(room);
-    return { room, player, reconnectToken };
+    return { room, player, reconnectToken: rawReconnectToken };
   }
 
   addBot(roomCode) {
+    const crypto = require('crypto');
     const room = this.getRoom(roomCode);
     if (!room)                                           return { error: 'ROOM_NOT_FOUND' };
     if (room.phase !== 'LOBBY')                          return { error: 'GAME_ALREADY_STARTED' };
@@ -189,7 +195,7 @@ class RoomManager {
     const botNames = ['بوت سعيد', 'بوت علياء', 'بوت كريم', 'بوت نورة', 'بوت طارق', 'بوت ريم', 'بوت ماجد', 'بوت سارة'];
     const randomName = botNames[Math.floor(Math.random() * botNames.length)];
     
-    const playerId = `bot_${randomUUID().substring(0, 8)}`;
+    const playerId = `bot_${crypto.randomUUID().substring(0, 8)}`;
     const player   = _makePlayer(playerId, randomName, false, null, true);
     room.players.push(player);
     room.lastActivityAt = Date.now();
@@ -234,11 +240,13 @@ class RoomManager {
     return true;
   }
 
-  reconnectPlayer(roomCode, reconnectToken, newSocketId) {
+  reconnectPlayer(roomCode, rawToken, newSocketId) {
+    const crypto = require('crypto');
     const room = this.getRoom(roomCode);
     if (!room) return { error: 'ROOM_NOT_FOUND' };
 
-    const player = room.players.find(p => p.reconnectToken === reconnectToken);
+    const tokenHash = crypto.createHash('sha256').update(rawToken || '').digest('hex');
+    const player = room.players.find(p => p.reconnectTokenHash === tokenHash || p.reconnectToken === rawToken);
     if (!player) return { error: 'INVALID_RECONNECT_TOKEN' };
 
     player.socketId    = newSocketId;
@@ -331,7 +339,9 @@ class RoomManager {
   }
 
   removeRoom(roomCode) {
-    const room = this.rooms.get(roomCode);
+    if (!roomCode) return;
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
     if (room) {
       if (room.phaseTimeout) {
         clearTimeout(room.phaseTimeout);
@@ -341,16 +351,25 @@ class RoomManager {
         clearInterval(room.timerInterval);
         room.timerInterval = null;
       }
+      if (room.emptyTimeout) {
+        clearTimeout(room.emptyTimeout);
+        room.emptyTimeout = null;
+      }
       room.phaseCallback = null;
-      room.players.forEach(p => {
-        if (p.disconnectTimeout) {
-          clearTimeout(p.disconnectTimeout);
-          p.disconnectTimeout = null;
-        }
-      });
-      this.rooms.delete(roomCode);
-      this.deleteRoomDb(roomCode);
-      console.log(`[RoomManager] Room ${roomCode} destroyed and purged.`);
+      if (Array.isArray(room.players)) {
+        room.players.forEach(p => {
+          if (p.disconnectTimeout) {
+            clearTimeout(p.disconnectTimeout);
+            p.disconnectTimeout = null;
+          }
+        });
+        room.players.length = 0;
+      }
+      if (room.nightActions) room.nightActions.clear();
+      if (room.votes) room.votes.clear();
+      this.rooms.delete(code);
+      this.deleteRoomDb(code);
+      console.log(`[RoomManager] Room ${code} completely destroyed and purged from memory.`);
     }
   }
 
@@ -369,16 +388,16 @@ class RoomManager {
         const connectedHumans = room.players.filter(p => !p.isBot && p.isConnected).length;
         const inactiveMs = now - (room.lastActivityAt || room.createdAt || now);
 
-        // Rule 1: Empty room with no connected human players for > 10 minutes
-        if (connectedHumans === 0 && inactiveMs > 10 * 60 * 1000) {
+        // Rule 1: Empty room with no connected human players for > 5 minutes
+        if (connectedHumans === 0 && inactiveMs > 5 * 60 * 1000) {
           roomsToDelete.push(roomCode);
         }
-        // Rule 2: Game finished (GAME_OVER) > 15 minutes ago
-        else if (room.phase === 'GAME_OVER' && inactiveMs > 15 * 60 * 1000) {
+        // Rule 2: Game finished (GAME_OVER) with no active humans, or finished > 3 minutes ago
+        else if (room.phase === 'GAME_OVER' && (connectedHumans === 0 || inactiveMs > 3 * 60 * 1000)) {
           roomsToDelete.push(roomCode);
         }
-        // Rule 3: Completely stale room with no activity for > 30 minutes
-        else if (inactiveMs > 30 * 60 * 1000) {
+        // Rule 3: Completely stale room with no activity for > 15 minutes
+        else if (inactiveMs > 15 * 60 * 1000) {
           roomsToDelete.push(roomCode);
         }
       });
@@ -397,7 +416,7 @@ class RoomManager {
 
 const { sanitizeInput } = require('./sanitizer');
 
-function _makePlayer(playerId, nickname, isHost, reconnectToken, isBot = false) {
+function _makePlayer(playerId, nickname, isHost, reconnectTokenHash, isBot = false) {
   const cleanNickname = sanitizeInput(nickname, 24) || (isBot ? 'Bot' : 'Player');
   return {
     playerId,
@@ -408,7 +427,7 @@ function _makePlayer(playerId, nickname, isHost, reconnectToken, isBot = false) 
     isAlive:              true,
     isConnected:          true,
     isReady:              false,
-    reconnectToken,
+    reconnectTokenHash,
     role:                 null,
     faction:              null,
     statuses:             new Set(),

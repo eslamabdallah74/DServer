@@ -121,7 +121,11 @@ function assignRoles(room) {
  * Also broadcasts countdown ticks every second so clients have a live timer.
  */
 function startPhase(io, room, phaseName, durationSeconds, onComplete) {
-  // Clear any existing timer first
+  // Clear any existing timer or timeout
+  if (room.phaseTimeout) {
+    clearTimeout(room.phaseTimeout);
+    room.phaseTimeout = null;
+  }
   if (room.timerInterval) {
     clearInterval(room.timerInterval);
     room.timerInterval = null;
@@ -142,47 +146,48 @@ function startPhase(io, room, phaseName, durationSeconds, onComplete) {
 
   console.log(`[Room ${room.roomCode}] Phase → ${phaseName} | ${durationSeconds}s | Round ${room.round}`);
 
+  io.to(room.roomCode).emit('s_phase_changed', {
+    eventSequence:  room.eventSequence,
+    phase:          room.phase,
+    phaseStartedAt: room.phaseStartedAt,
+    phaseEndsAt:    room.phaseEndsAt,
+    round:          room.round,
+    serverTime:     Date.now(),
+  });
+
   broadcastSanitizedRoomSnapshot(io, room);
   
   // Trigger bot actions for this phase safely
   try {
-    require('./botEngine').handleBotActionsForPhase(room, io);
+    const botEngine = require('./botEngine');
+    if (botEngine && typeof botEngine.handleBotActionsForPhase === 'function') {
+      botEngine.handleBotActionsForPhase(room, io);
+    }
   } catch (err) {
-    console.error(`[Room ${room.roomCode}] Error handling bot actions:`, err);
+    // botEngine is optional
   }
 
   if (durationSeconds <= 0) return;
 
-  // Tick every second to keep clients in sync
-  room.timerInterval = setInterval(() => {
-    // Verify room phase hasn't changed under us
-    if (room.phaseToken !== phaseToken) {
-      clearInterval(room.timerInterval);
-      return;
-    }
-
-    const remainingMs = room.phaseEndsAt - Date.now();
-
-    // Broadcast tick so Flutter timer updates
-    broadcastTimerTick(io, room, Math.max(0, Math.ceil(remainingMs / 1000)));
-
-    if (remainingMs <= 0) {
-      clearInterval(room.timerInterval);
-      room.timerInterval = null;
-      if (room.phaseToken === phaseToken && room.phaseCallback) {
-        const cb = room.phaseCallback;
-        room.phaseCallback = null;
-        try {
-          cb();
-        } catch (err) {
-          console.error(`[Room ${room.roomCode}] Error in phaseCallback (${phaseName}):`, err);
-        }
+  room.phaseTimeout = setTimeout(() => {
+    room.phaseTimeout = null;
+    if (room.phaseToken === phaseToken && room.phaseCallback) {
+      const cb = room.phaseCallback;
+      room.phaseCallback = null;
+      try {
+        cb();
+      } catch (err) {
+        console.error(`[Room ${room.roomCode}] Error in phaseCallback (${phaseName}):`, err);
       }
     }
-  }, 1000);
+  }, durationSeconds * 1000);
 }
 
 function skipPhase(room, io) {
+  if (room.phaseTimeout) {
+    clearTimeout(room.phaseTimeout);
+    room.phaseTimeout = null;
+  }
   if (room.timerInterval) {
     clearInterval(room.timerInterval);
     room.timerInterval = null;
@@ -225,12 +230,13 @@ function broadcastSanitizedRoomSnapshot(io, room) {
     const shadowAllies = p.faction === 'shadow'
       ? room.players
           .filter(a => a.faction === 'shadow' && a.playerId !== p.playerId)
-          .map(a => ({ playerId: a.playerId, nickname: a.nickname, role: a.role, isAlive: a.isAlive }))
+          .map(a => ({ playerId: a.playerId, nickname: a.nickname }))
       : [];
 
     const snapshot = {
       roomCode:        room.roomCode,
       eventSequence:   room.eventSequence,
+      serverTime:      Date.now(),
       phase:           room.phase,
       phaseStartedAt:  room.phaseStartedAt,
       phaseEndsAt:     room.phaseEndsAt,
@@ -286,6 +292,8 @@ function broadcastSanitizedRoomSnapshot(io, room) {
     };
 
     io.to(p.socketId).emit('s_room_snapshot', snapshot);
+    io.to(p.socketId).emit('room:updated', snapshot);
+    io.to(p.socketId).emit('game:state', snapshot);
   });
 }
 

@@ -25,7 +25,7 @@ function sanitizeInput(input, maxLength = 255) {
 
 function isValidRoomCode(code) {
   if (typeof code !== 'string') return false;
-  return /^[A-Z0-9]{6}$/.test(code.trim().toUpperCase());
+  return /^[A-Z0-9]{4,6}$/.test(code.trim().toUpperCase());
 }
 
 function isValidPlayerId(id) {
