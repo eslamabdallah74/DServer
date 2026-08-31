@@ -563,4 +563,5 @@ server.listen(BIND_PORT, () => {
   });
 });
 
-module.exports = server;
+module.exports = app;
+module.exports.server = server;
