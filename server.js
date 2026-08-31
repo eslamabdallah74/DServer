@@ -543,6 +543,14 @@ process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 // Start server on process.env.PORT or 3001 (supports Phusion Passenger Unix domain socket)
 const BIND_PORT = process.env.PORT || 3001;
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn(`[Port Warning] Port ${BIND_PORT} is already in use by an active server instance.`);
+  } else {
+    console.error('[Server Error]', err.message);
+  }
+});
+
 server.listen(BIND_PORT, () => {
   console.log('=================================================');
   console.log('  Deceit Online — Authoritative Server v2 (HARDENED)');
