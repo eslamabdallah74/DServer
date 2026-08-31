@@ -230,6 +230,7 @@ class RoomManager {
       player.disconnectTimeout = null;
     }
     room.lastActivityAt = Date.now();
+    this.saveRoomDb(room);
     return true;
   }
 
@@ -247,6 +248,7 @@ class RoomManager {
       player.disconnectTimeout = null;
     }
     room.lastActivityAt = Date.now();
+    this.saveRoomDb(room);
     return { room, player };
   }
 
