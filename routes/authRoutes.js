@@ -89,7 +89,7 @@ router.post('/register', registerLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error('[Auth API] Register error:', err);
-    return res.status(500).json({ error: 'SERVER_ERROR', message: 'حدث خطأ غير متوقع أثناء التسجيل.' });
+    return res.status(500).json({ error: 'SERVER_ERROR', message: err.message || 'حدث خطأ غير متوقع أثناء التسجيل.', details: err.stack });
   }
 });
 
@@ -142,7 +142,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     });
   } catch (err) {
     console.error('[Auth API] Login error:', err);
-    return res.status(500).json({ error: 'SERVER_ERROR', message: 'حدث خطأ أثناء تسجيل الدخول.' });
+    return res.status(500).json({ error: 'SERVER_ERROR', message: err.message || 'حدث خطأ أثناء تسجيل الدخول.', details: err.stack });
   }
 });
 
