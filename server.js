@@ -16,7 +16,7 @@ const { Server } = require('socket.io');
 const cors     = require('cors');
 const cookieParser = require('cookie-parser');
 
-const { testConnectionAndMigrate, isDbConnected } = require('./db');
+const { testConnectionAndMigrate, isDbConnected, getDbType } = require('./db');
 const authRoutes  = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const syncRoutes  = require('./routes/syncRoutes');
@@ -95,6 +95,7 @@ function getStatusPayload() {
   return {
     status: 'ok',
     dbConnected: isDbConnected(),
+    dbType: getDbType(),
     activeRooms: roomManager.rooms.size,
     totalPlayers: totalPlayersCount,
     uptimeSeconds,

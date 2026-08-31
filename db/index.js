@@ -71,11 +71,16 @@ async function query(sql, params = []) {
       const result = await pool.query(finalSql, params);
       return [result.rows, result];
     } catch (err) {
-      err.message += ` (Executed SQL: "${finalSql}", Params: ${JSON.stringify(params)})`;
-      throw err;
+      console.error('[DB PG Query Error]', err.message, 'SQL:', finalSql, 'Params:', params);
+      throw new Error(`Postgres Error: ${err.message} | Executed SQL: "${finalSql}" | Params: ${JSON.stringify(params)}`);
     }
   } else {
-    return pool.query(sql, params);
+    try {
+      return await pool.query(sql, params);
+    } catch (err) {
+      console.error('[DB MySQL Query Error]', err.message, 'SQL:', sql, 'Params:', params);
+      throw new Error(`MySQL Error: ${err.message} | Executed SQL: "${sql}" | Params: ${JSON.stringify(params)}`);
+    }
   }
 }
 
