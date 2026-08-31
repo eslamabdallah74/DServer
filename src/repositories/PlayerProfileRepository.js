@@ -1,10 +1,14 @@
 const { getPool, isDbConnected } = require('../core/Database');
 
+const inMemoryProfiles = new Map();
+
 class PlayerProfileRepository {
   static async findById(playerId) {
-    if (!isDbConnected()) return null;
+    if (!isDbConnected()) {
+      return inMemoryProfiles.get(playerId) || null;
+    }
     const pool = getPool();
-    if (!pool) return null;
+    if (!pool) return inMemoryProfiles.get(playerId) || null;
 
     try {
       const [rows] = await pool.query('SELECT * FROM player_profiles WHERE player_id = ?', [playerId]);
@@ -26,19 +30,29 @@ class PlayerProfileRepository {
       };
     } catch (err) {
       console.error('[PlayerProfileRepository] findById error:', err.message);
-      return null;
+      return inMemoryProfiles.get(playerId) || null;
     }
   }
 
   static async syncProfile(payload) {
-    if (!isDbConnected()) return null;
-    const pool = getPool();
-    if (!pool) return null;
-
     const { playerId, nickname, coins = 0, ownedRoles = [], stats = {} } = payload;
     const incomingWins = stats.wins || 0;
     const incomingLosses = stats.losses || 0;
     const incomingMatches = stats.matches || 0;
+
+    const inMemoryItem = {
+      playerId,
+      nickname: nickname || 'Player',
+      coins,
+      ownedRoles,
+      stats: { wins: incomingWins, losses: incomingLosses, matches: incomingMatches },
+      updatedAt: new Date().toISOString(),
+    };
+    inMemoryProfiles.set(playerId, inMemoryItem);
+
+    if (!isDbConnected()) return inMemoryItem;
+    const pool = getPool();
+    if (!pool) return inMemoryItem;
 
     try {
       const existing = await this.findById(playerId);
@@ -86,7 +100,7 @@ class PlayerProfileRepository {
       return this.findById(playerId);
     } catch (err) {
       console.error('[PlayerProfileRepository] syncProfile error:', err.message);
-      return null;
+      return inMemoryItem;
     }
   }
 }
