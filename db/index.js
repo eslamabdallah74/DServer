@@ -128,6 +128,54 @@ async function runPgMigrations() {
   if (!pool || !dbConnected) return;
   try {
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(20) NOT NULL DEFAULT 'player',
+        coins INT NOT NULL DEFAULT 0,
+        is_banned INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_logs (
+        id SERIAL PRIMARY KEY,
+        admin_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        admin_email VARCHAR(100) NOT NULL,
+        action_type VARCHAR(50) NOT NULL,
+        target_type VARCHAR(50) NOT NULL,
+        target_id VARCHAR(100) NOT NULL,
+        details JSONB DEFAULT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_feedback (
+        id SERIAL PRIMARY KEY,
+        feedback_id VARCHAR(64) UNIQUE NOT NULL,
+        rating INT NOT NULL DEFAULT 5,
+        comment TEXT,
+        category VARCHAR(50),
+        contact_email VARCHAR(100),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS match_logs (
+        id SERIAL PRIMARY KEY,
+        match_id VARCHAR(64) UNIQUE NOT NULL,
+        player_count INT NOT NULL,
+        winner_team VARCHAR(50) NOT NULL,
+        roles_used JSONB,
+        duration_seconds INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS player_profiles (
         id SERIAL PRIMARY KEY,
         player_id VARCHAR(64) NOT NULL UNIQUE,
@@ -171,7 +219,7 @@ async function runPgMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
-    console.log('[DB] PostgreSQL tables ready (player_profiles, app_issues).');
+    console.log('[DB] PostgreSQL tables ready (users, admin_audit_logs, user_feedback, match_logs, player_profiles, app_issues).');
   } catch (err) {
     console.warn('[DB PG Migration]', err.message);
   }
