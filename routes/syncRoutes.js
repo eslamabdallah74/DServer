@@ -54,8 +54,57 @@ router.post('/player', authenticateToken, PlayerSyncController.sync);
 router.post('/players', authenticateToken, PlayerSyncController.sync);
 router.get('/player/:id', authenticateToken, PlayerSyncController.getPlayer);
 
-// Issue logging endpoints
-router.post('/issues', authenticateToken, IssueController.logIssue);
-router.get('/issues', authenticateToken, IssueController.getIssues);
+// HTTP REST Room Endpoints for Serverless Compatibility
+const roomManager = require('../roomManager');
+
+router.post('/rooms/create', async (req, res) => {
+  try {
+    const { nickname, settings } = req.body || {};
+    const { room, hostPlayer, reconnectToken } = roomManager.createRoom(nickname, settings || {});
+    await roomManager.saveRoomDb(room);
+    return res.status(201).json({
+      success: true,
+      roomCode: room.roomCode,
+      playerId: hostPlayer.playerId,
+      reconnectToken,
+      room,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/rooms/join', async (req, res) => {
+  try {
+    const { roomCode, nickname } = req.body || {};
+    await roomManager.loadRoomDb(roomCode);
+    const result = roomManager.joinRoom(roomCode, nickname);
+    if (result.error) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    await roomManager.saveRoomDb(result.room);
+    return res.json({
+      success: true,
+      roomCode: result.room.roomCode,
+      playerId: result.player.playerId,
+      reconnectToken: result.reconnectToken,
+      room: result.room,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/rooms/:roomCode', async (req, res) => {
+  try {
+    const room = await roomManager.getRoomAsync(req.params.roomCode);
+    if (!room) {
+      return res.status(404).json({ success: false, error: 'ROOM_NOT_FOUND' });
+    }
+    return res.json({ success: true, room });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 module.exports = router;
