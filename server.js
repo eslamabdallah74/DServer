@@ -28,31 +28,33 @@ app.use(cookieParser());
 app.use((req, res, next) => {
   if (req.url.startsWith('/server/')) {
     req.url = req.url.substring(7);
+    req.originalUrl = req.url;
   } else if (req.url === '/server') {
     req.url = '/';
+    req.originalUrl = '/';
   }
   next();
 });
 
 // Serve Web Admin Dashboard static files
-app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+app.use(['/admin', '/server/admin'], express.static(path.join(__dirname, 'public/admin')));
 
-// Mount API routes (both standard and /server subpath for cPanel Passenger)
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/sync', syncRoutes);
-app.use('/api/players', syncRoutes);
-app.use('/api/issues', syncRoutes);
-app.use('/api/feedback', syncRoutes);
-app.use('/api/stats', syncRoutes);
+// Mount API routes supporting both standard and /server subpath for cPanel Passenger
+const apiSyncPaths  = ['/api/sync', '/server/api/sync'];
+const apiPlayerPaths = ['/api/players', '/server/api/players'];
+const apiIssuePaths  = ['/api/issues', '/server/api/issues'];
+const apiFbPaths     = ['/api/feedback', '/server/api/feedback'];
+const apiStatsPaths  = ['/api/stats', '/server/api/stats'];
+const apiAuthPaths   = ['/api/auth', '/server/api/auth'];
+const apiAdminPaths  = ['/api/admin', '/server/api/admin'];
 
-app.use('/server/api/auth', authRoutes);
-app.use('/server/api/admin', adminRoutes);
-app.use('/server/api/sync', syncRoutes);
-app.use('/server/api/players', syncRoutes);
-app.use('/server/api/issues', syncRoutes);
-app.use('/server/api/feedback', syncRoutes);
-app.use('/server/api/stats', syncRoutes);
+apiAuthPaths.forEach(p => app.use(p, authRoutes));
+apiAdminPaths.forEach(p => app.use(p, adminRoutes));
+apiSyncPaths.forEach(p => app.use(p, syncRoutes));
+apiPlayerPaths.forEach(p => app.use(p, syncRoutes));
+apiIssuePaths.forEach(p => app.use(p, syncRoutes));
+apiFbPaths.forEach(p => app.use(p, syncRoutes));
+apiStatsPaths.forEach(p => app.use(p, syncRoutes));
 
 
 const startTime = Date.now();
