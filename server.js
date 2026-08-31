@@ -56,6 +56,7 @@ const apiFbPaths     = ['/api/feedback', '/server/api/feedback'];
 const apiStatsPaths  = ['/api/stats', '/server/api/stats'];
 const apiAuthPaths   = ['/api/auth', '/server/api/auth'];
 const apiAdminPaths  = ['/api/admin', '/server/api/admin'];
+const apiRoomPaths   = ['/api/rooms', '/server/api/rooms'];
 
 apiAuthPaths.forEach(p => app.use(p, authRoutes));
 apiAdminPaths.forEach(p => app.use(p, adminRoutes));
@@ -64,6 +65,7 @@ apiPlayerPaths.forEach(p => app.use(p, syncRoutes));
 apiIssuePaths.forEach(p => app.use(p, syncRoutes));
 apiFbPaths.forEach(p => app.use(p, syncRoutes));
 apiStatsPaths.forEach(p => app.use(p, syncRoutes));
+apiRoomPaths.forEach(p => app.use(p, syncRoutes));
 
 
 const startTime = Date.now();
