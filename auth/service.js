@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getPool, isDbConnected } = require('../db');
+const { query, isDbConnected, getDbType } = require('../db');
 
 const BCRYPT_SALT_ROUNDS = 10;
 const JWT_EXPIRES_IN = '24h';
@@ -61,45 +61,49 @@ function sanitizeUserDTO(userRow) {
 
 async function findUserByEmail(email) {
   if (!isDbConnected()) return null;
-  const pool = getPool();
-  const [rows] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
-  return rows.length > 0 ? rows[0] : null;
+  const [rows] = await query('SELECT * FROM users WHERE email = ?', [email]);
+  return (rows && rows.length > 0) ? rows[0] : null;
 }
 
 async function findUserByUsername(username) {
   if (!isDbConnected()) return null;
-  const pool = getPool();
-  const [rows] = await pool.query('SELECT * FROM users WHERE username = ? LIMIT 1', [username]);
-  return rows.length > 0 ? rows[0] : null;
+  const [rows] = await query('SELECT * FROM users WHERE username = ?', [username]);
+  return (rows && rows.length > 0) ? rows[0] : null;
 }
 
 async function findUserById(id) {
   if (!isDbConnected()) return null;
-  const pool = getPool();
-  const [rows] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
-  return rows.length > 0 ? rows[0] : null;
+  const [rows] = await query('SELECT * FROM users WHERE id = ?', [id]);
+  return (rows && rows.length > 0) ? rows[0] : null;
 }
 
 async function createUser({ username, email, password, role = 'player', coins = 0 }) {
   if (!isDbConnected()) throw new Error('DB_OFFLINE');
-  const pool = getPool();
   const passwordHash = await hashPassword(password);
   // ALWAYS force player role if not admin creation
   const finalRole = role === 'admin' ? 'admin' : 'player';
 
-  const [result] = await pool.query(
-    'INSERT INTO users (username, email, password_hash, role, coins) VALUES (?, ?, ?, ?, ?)',
-    [username, email, passwordHash, finalRole, coins]
-  );
-
-  const newId = result.insertId;
-  const user = await findUserById(newId);
-  return sanitizeUserDTO(user);
+  if (getDbType() === 'pg') {
+    const [rows] = await query(
+      'INSERT INTO users (username, email, password_hash, role, coins) VALUES (?, ?, ?, ?, ?) RETURNING id',
+      [username, email, passwordHash, finalRole, coins]
+    );
+    const newId = rows[0].id;
+    const user = await findUserById(newId);
+    return sanitizeUserDTO(user);
+  } else {
+    const [rows, result] = await query(
+      'INSERT INTO users (username, email, password_hash, role, coins) VALUES (?, ?, ?, ?, ?)',
+      [username, email, passwordHash, finalRole, coins]
+    );
+    const newId = result.insertId;
+    const user = await findUserById(newId);
+    return sanitizeUserDTO(user);
+  }
 }
 
 async function listUsers({ search = '', limit = 50, offset = 0 } = {}) {
   if (!isDbConnected()) return { users: [], total: 0 };
-  const pool = getPool();
 
   let sql = 'SELECT * FROM users';
   const params = [];
@@ -110,13 +114,13 @@ async function listUsers({ search = '', limit = 50, offset = 0 } = {}) {
     params.push(term, term);
   }
 
-  const [countRows] = await pool.query(`SELECT COUNT(*) as total FROM (${sql}) as sub`, params);
-  const total = countRows[0].total;
+  const [countRows] = await query(`SELECT COUNT(*) as total FROM (${sql}) as sub`, [...params]);
+  const total = parseInt(countRows[0].total, 10);
 
   sql += ' ORDER BY id DESC LIMIT ? OFFSET ?';
   params.push(parseInt(limit, 10), parseInt(offset, 10));
 
-  const [rows] = await pool.query(sql, params);
+  const [rows] = await query(sql, params);
   return {
     users: rows.map(sanitizeUserDTO),
     total,
@@ -125,47 +129,41 @@ async function listUsers({ search = '', limit = 50, offset = 0 } = {}) {
 
 async function countAdmins() {
   if (!isDbConnected()) return 0;
-  const pool = getPool();
-  const [rows] = await pool.query('SELECT COUNT(*) as total FROM users WHERE role = ?', ['admin']);
-  return rows[0].total;
+  const [rows] = await query('SELECT COUNT(*) as total FROM users WHERE role = ?', ['admin']);
+  return parseInt(rows[0].total, 10);
 }
 
 async function updateUserRole(userId, newRole) {
   if (!isDbConnected()) throw new Error('DB_OFFLINE');
-  const pool = getPool();
-  await pool.query('UPDATE users SET role = ? WHERE id = ?', [newRole, userId]);
+  await query('UPDATE users SET role = ? WHERE id = ?', [newRole, userId]);
   const user = await findUserById(userId);
   return sanitizeUserDTO(user);
 }
 
 async function updateUserCoins(userId, newCoins) {
   if (!isDbConnected()) throw new Error('DB_OFFLINE');
-  const pool = getPool();
-  await pool.query('UPDATE users SET coins = ? WHERE id = ?', [newCoins, userId]);
+  await query('UPDATE users SET coins = ? WHERE id = ?', [newCoins, userId]);
   const user = await findUserById(userId);
   return sanitizeUserDTO(user);
 }
 
 async function deleteUser(userId) {
   if (!isDbConnected()) throw new Error('DB_OFFLINE');
-  const pool = getPool();
-  const [res] = await pool.query('DELETE FROM users WHERE id = ?', [userId]);
-  return res.affectedRows > 0;
+  const [rows, result] = await query('DELETE FROM users WHERE id = ?', [userId]);
+  return (result.rowCount || result.affectedRows || 0) > 0;
 }
 
 async function toggleUserBan(userId, isBanned) {
   if (!isDbConnected()) throw new Error('DB_OFFLINE');
-  const pool = getPool();
-  await pool.query('UPDATE users SET is_banned = ? WHERE id = ?', [isBanned ? 1 : 0, userId]);
+  await query('UPDATE users SET is_banned = ? WHERE id = ?', [isBanned ? 1 : 0, userId]);
   const user = await findUserById(userId);
   return sanitizeUserDTO(user);
 }
 
 async function resetUserPassword(userId, newPassword) {
   if (!isDbConnected()) throw new Error('DB_OFFLINE');
-  const pool = getPool();
   const passwordHash = await hashPassword(newPassword);
-  await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
+  await query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, userId]);
   const user = await findUserById(userId);
   return sanitizeUserDTO(user);
 }
