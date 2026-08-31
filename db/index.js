@@ -63,10 +63,14 @@ async function query(sql, params = []) {
     // Convert MySQL ? placeholders to Postgres $1, $2, ...
     let idx = 0;
     const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-    // Convert NOW() to Postgres equivalent
     const finalSql = pgSql.replace(/\bNOW\(\)/gi, 'NOW()');
-    const result = await pool.query(finalSql, params);
-    return [result.rows, result];
+    try {
+      const result = await pool.query(finalSql, params);
+      return [result.rows, result];
+    } catch (err) {
+      err.message += ` (Executed SQL: "${finalSql}", Params: ${JSON.stringify(params)})`;
+      throw err;
+    }
   } else {
     return pool.query(sql, params);
   }
