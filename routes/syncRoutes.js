@@ -57,7 +57,7 @@ router.get('/player/:id', authenticateToken, PlayerSyncController.getPlayer);
 // HTTP REST Room Endpoints for Serverless Compatibility
 const roomManager = require('../roomManager');
 
-router.post('/rooms/create', async (req, res) => {
+router.post('/create', async (req, res) => {
   try {
     const { nickname, settings } = req.body || {};
     const { room, hostPlayer, reconnectToken } = roomManager.createRoom(nickname, settings || {});
@@ -74,7 +74,7 @@ router.post('/rooms/create', async (req, res) => {
   }
 });
 
-router.post('/rooms/join', async (req, res) => {
+router.post('/join', async (req, res) => {
   try {
     const { roomCode, nickname } = req.body || {};
     await roomManager.loadRoomDb(roomCode);
@@ -95,7 +95,7 @@ router.post('/rooms/join', async (req, res) => {
   }
 });
 
-router.get('/rooms/:roomCode', async (req, res) => {
+router.get('/:roomCode', async (req, res) => {
   try {
     const room = await roomManager.getRoomAsync(req.params.roomCode);
     if (!room) {
