@@ -16,7 +16,7 @@ class RoomManager {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid 0/O, 1/I confusion
     let code = '';
     do {
-      code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      code = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     } while (this.rooms.has(code));
     return code;
   }
@@ -339,6 +339,10 @@ class RoomManager {
   removeRoom(roomCode) {
     const room = this.rooms.get(roomCode);
     if (room) {
+      if (room.phaseTimeout) {
+        clearTimeout(room.phaseTimeout);
+        room.phaseTimeout = null;
+      }
       if (room.timerInterval) {
         clearInterval(room.timerInterval);
         room.timerInterval = null;

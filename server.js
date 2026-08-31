@@ -357,8 +357,8 @@ io.on('connection', socket => {
       socket.emit('s_error', { code: 'ALREADY_STARTED', message: 'اللعبة بدأت بالفعل' });
       return;
     }
-    if (room.players.length < 5) {
-      socket.emit('s_error', { code: 'NOT_ENOUGH_PLAYERS', message: 'يلزم 5 لاعبين على الأقل لبدء اللعبة' });
+    if (room.players.length < 4) {
+      socket.emit('s_error', { code: 'NOT_ENOUGH_PLAYERS', message: 'يلزم 4 لاعبين على الأقل لبدء اللعبة' });
       return;
     }
 
