@@ -163,6 +163,18 @@ const io     = new Server(server, {
 
 app.set('io', io);
 
+// Express handler for Vercel/Serverless environments to process Socket.IO polling & Engine.IO requests
+app.all(['/socket.io*', '/server/socket.io*'], (req, res) => {
+  if (req.url && req.url.startsWith('/server/socket.io')) {
+    req.url = req.url.substring(7);
+  }
+  if (io && io.engine) {
+    io.engine.handleRequest(req, res);
+  } else {
+    res.status(500).send('Socket.IO Engine not initialized');
+  }
+});
+
 // Test database connection and apply migrations on boot
 testConnectionAndMigrate().then(connected => {
   if (connected) {
