@@ -248,6 +248,19 @@ async function runPgMigrations() {
 async function runMysqlMigrations() {
   if (!pool || !dbConnected) return;
 
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS active_rooms (
+        room_code VARCHAR(10) PRIMARY KEY,
+        room_data LONGTEXT NOT NULL,
+        last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch (err) {
+    console.warn('[DB MySQL ActiveRooms]', err.message);
+  }
+
   const migrationsDir = path.join(__dirname, 'migrations');
   if (!fs.existsSync(migrationsDir)) return;
 

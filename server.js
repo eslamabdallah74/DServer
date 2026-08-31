@@ -71,38 +71,18 @@ apiRoomPaths.forEach(p => app.use(p, syncRoutes));
 const startTime = Date.now();
 
 function getStatusPayload() {
-  const rooms = [];
   let totalPlayersCount = 0;
-
   roomManager.rooms.forEach(r => {
-    const connected = r.players.filter(p => p.isConnected).length;
-    totalPlayersCount += connected;
-    rooms.push({
-      roomCode:  r.roomCode,
-      phase:     r.phase,
-      round:     r.round,
-      players:   r.players.length,
-      connected,
-    });
+    totalPlayersCount += r.players.filter(p => p.isConnected).length;
   });
 
-  const uptimeSeconds = (Date.now() - startTime) / 1000;
-  const formatUptime = (sec) => {
-    const hrs = Math.floor(sec / 3600);
-    const mins = Math.floor((sec % 3600) / 60);
-    const secs = Math.floor(sec % 60);
-    return `${hrs}h ${mins}m ${secs}s`;
-  };
+  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
 
   return {
     status: 'ok',
-    dbConnected: isDbConnected(),
-    dbType: getDbType(),
     activeRooms: roomManager.rooms.size,
     totalPlayers: totalPlayersCount,
     uptimeSeconds,
-    uptime: formatUptime(uptimeSeconds),
-    rooms,
   };
 }
 
@@ -111,19 +91,14 @@ app.get('/', (req, res) => {
   res.redirect('/admin/login.html');
 });
 
-// ─── Health check endpoint (HTML by default, JSON if requested) ────────────────
+// ─── Health check endpoint (Cheap JSON) ───────────────────────────────────────
 app.get('/health', (req, res) => {
-  if (req.query.json === '1' || req.headers.accept?.includes('application/json')) {
-    return res.json(getStatusPayload());
-  }
-  const payload = getStatusPayload();
-  const html = getDashboardHtml({
-    activeRoomsCount: payload.activeRooms,
-    totalPlayersCount: payload.totalPlayers,
-    rooms: payload.rooms,
-    uptimeSeconds: payload.uptimeSeconds,
+  res.json({
+    status:        'ok',
+    activeRooms:   roomManager.rooms ? roomManager.rooms.size : 0,
+    totalPlayers:  typeof roomManager.getTotalPlayers === 'function' ? roomManager.getTotalPlayers() : 0,
+    uptimeSeconds: Math.floor(process.uptime()),
   });
-  res.send(html);
 });
 
 let latestBroadcast = null;
@@ -314,6 +289,21 @@ io.on('connection', socket => {
       playerId: player.playerId,
     });
 
+    // Re-emit private role payload directly to caller socket on reconnect
+    if (player.role) {
+      const shadowAllies = player.faction === 'shadow'
+        ? room.players
+            .filter(a => a.faction === 'shadow' && a.playerId !== player.playerId)
+            .map(a => ({ playerId: a.playerId, nickname: a.nickname, role: a.role, isAlive: a.isAlive }))
+        : [];
+
+      socket.emit('s_role_assigned', {
+        role:         player.role,
+        faction:      player.faction,
+        shadowAllies: shadowAllies,
+      });
+    }
+
     // Replay permitted chat history
     const history = chatEngine.getPermittedHistory(room, player);
     socket.emit('s_chat_history', { history });
@@ -357,8 +347,8 @@ io.on('connection', socket => {
       socket.emit('s_error', { code: 'ALREADY_STARTED', message: 'اللعبة بدأت بالفعل' });
       return;
     }
-    if (room.players.length < 5) {
-      socket.emit('s_error', { code: 'NOT_ENOUGH_PLAYERS', message: 'يلزم 5 لاعبين على الأقل لبدء اللعبة' });
+    if (room.players.length < 4) {
+      socket.emit('s_error', { code: 'NOT_ENOUGH_PLAYERS', message: 'يلزم 4 لاعبين على الأقل لبدء اللعبة' });
       return;
     }
 
@@ -392,88 +382,129 @@ io.on('connection', socket => {
 
   // ── 5. Submit Night Action ──────────────────────────────────────────────────
   socket.on('c_submit_night_action', ({ roomCode, playerId, targetPlayerId } = {}) => {
-    const room = roomManager.getRoom(roomCode);
-    if (!room || room.phase !== 'NIGHT') return;
+    try {
+      const room = roomManager.getRoom(roomCode);
+      if (!room || room.phase !== 'NIGHT') {
+        socket.emit('s_error', { code: 'INVALID_PHASE', message: 'لا يمكنك تنفيذ قدرة الليل في هذه المرحلة' });
+        return;
+      }
 
-    const actor = room.players.find(p => p.playerId === playerId);
-    if (!actor || !actor.isAlive) return;
+      const actor = room.players.find(p => p.playerId === playerId && p.socketId === socket.id);
+      if (!actor || !actor.isAlive) {
+        socket.emit('s_error', { code: 'PLAYER_DEAD', message: 'اللاعب غير متاح أو متوفى' });
+        return;
+      }
 
-    // Record the action (override if submitted again)
-    room.nightActions.set(actor.playerId, {
-      actorPlayerId:  actor.playerId,
-      roleId:         actor.role,
-      targetPlayerId: targetPlayerId,
-      submittedAt:    Date.now(),
-    });
-    
-    actor.isReady = true;
+      // Idempotency check: Reject duplicate night action submission
+      if (room.nightActions.has(actor.playerId)) {
+        socket.emit('s_error', { code: 'ACTION_ALREADY_SUBMITTED', message: 'لقد أرسلت قدرتك بالفعل هذه الجولة' });
+        return;
+      }
 
-    socket.emit('s_night_action_accepted', { success: true, targetPlayerId });
-    console.log(`[Room ${room.roomCode}] Night action: ${actor.role} → ${targetPlayerId}`);
-    
-    broadcastSanitizedRoomSnapshot(io, room);
-    const { checkAllReady } = require('./gameEngine');
-    checkAllReady(room, io);
+      // Record night action
+      room.nightActions.set(actor.playerId, {
+        actorPlayerId:  actor.playerId,
+        roleId:         actor.role,
+        targetPlayerId: targetPlayerId,
+        submittedAt:    Date.now(),
+      });
+      
+      actor.isReady = true;
+
+      socket.emit('s_night_action_accepted', { success: true, targetPlayerId });
+      console.log(`[Room ${room.roomCode}] Night action: ${actor.role} → ${targetPlayerId}`);
+      
+      broadcastSanitizedRoomSnapshot(io, room);
+      const { checkAllReady } = require('./gameEngine');
+      checkAllReady(room, io);
+    } catch (err) {
+      console.error('[c_submit_night_action] Error:', err);
+      socket.emit('s_error', { code: 'SERVER_ERROR', message: 'حدث خطأ في تقديم القدرة' });
+    }
   });
 
   // ── 6. Complete Task ────────────────────────────────────────────────────────
   socket.on('c_complete_task', ({ roomCode, playerId, taskId } = {}) => {
-    const room = roomManager.getRoom(roomCode);
-    if (!room || room.phase !== 'DAY') return;
+    try {
+      const room = roomManager.getRoom(roomCode);
+      if (!room || room.phase !== 'DAY') return;
 
-    const player = room.players.find(p => p.playerId === playerId);
-    if (!player || !player.isAlive) return;
+      const player = room.players.find(p => p.playerId === playerId && p.socketId === socket.id);
+      if (!player || !player.isAlive) return;
 
-    player.completedTasks += 1;
+      player.completedTasks += 1;
 
-    const totalRequired  = room.players.filter(p => p.isAlive).length * 2;
-    const totalCompleted = room.players.reduce((sum, p) => sum + p.completedTasks, 0);
+      const totalRequired  = room.players.filter(p => p.isAlive).length * 2;
+      const totalCompleted = room.players.reduce((sum, p) => sum + p.completedTasks, 0);
 
-    room.taskProgress = Math.min(1.0, totalCompleted / totalRequired);
-    broadcastSanitizedRoomSnapshot(io, room);
+      room.taskProgress = Math.min(1.0, totalCompleted / totalRequired);
+      broadcastSanitizedRoomSnapshot(io, room);
 
-    // If tasks hit 100%, kingdom wins immediately
-    if (room.taskProgress >= 1.0) {
-      const { evaluateVictory } = require('./victoryEngine');
-      const victory = evaluateVictory(room);
-      if (victory.isDecided) {
-        room.victoryOutcome = victory;
-        startPhase(io, room, 'GAME_OVER', 0, null);
+      // If tasks hit 100%, kingdom wins immediately
+      if (room.taskProgress >= 1.0) {
+        const { evaluateVictory } = require('./victoryEngine');
+        const victory = evaluateVictory(room);
+        if (victory.isDecided) {
+          room.victoryOutcome = victory;
+          startPhase(io, room, 'GAME_OVER', 0, null);
+        }
       }
+    } catch (err) {
+      console.error('[c_complete_task] Error:', err);
     }
   });
 
   // ── 7. Cast Vote ────────────────────────────────────────────────────────────
   socket.on('c_cast_vote', ({ roomCode, playerId, targetPlayerId } = {}) => {
-    const room = roomManager.getRoom(roomCode);
-    if (!room || room.phase !== 'VOTING') return;
+    try {
+      const room = roomManager.getRoom(roomCode);
+      if (!room || room.phase !== 'VOTING') {
+        socket.emit('s_error', { code: 'INVALID_PHASE', message: 'التصويت غير متاح في هذه المرحلة' });
+        return;
+      }
 
-    const voter = room.players.find(p => p.playerId === playerId);
-    if (!voter || !voter.isAlive) return;
+      const voter = room.players.find(p => p.playerId === playerId && p.socketId === socket.id);
+      if (!voter || !voter.isAlive) {
+        socket.emit('s_error', { code: 'PLAYER_DEAD', message: 'اللاعب غير متاح أو متوفى' });
+        return;
+      }
 
-    // Can't vote for self
-    if (voter.playerId === targetPlayerId) {
-      socket.emit('s_error', { code: 'SELF_VOTE', message: 'لا يمكنك التصويت على نفسك' });
-      return;
+      // Idempotency check: Reject duplicate vote
+      if (room.votes.has(voter.playerId)) {
+        socket.emit('s_error', { code: 'ALREADY_VOTED', message: 'لقد قمت بالتصويت بالفعل هذه الجولة' });
+        return;
+      }
+
+      // Can't vote for self
+      if (voter.playerId === targetPlayerId) {
+        socket.emit('s_error', { code: 'SELF_VOTE', message: 'لا يمكنك التصويت على نفسك' });
+        return;
+      }
+
+      const target = room.players.find(p => p.playerId === targetPlayerId);
+      if (!target || !target.isAlive) {
+        socket.emit('s_error', { code: 'INVALID_TARGET', message: 'الهدف غير صالح أو متوفى' });
+        return;
+      }
+
+      room.votes.set(voter.playerId, targetPlayerId);
+      voter.isReady = true; // Auto-ready after voting
+      socket.emit('s_vote_accepted', { success: true, targetPlayerId });
+
+      // Broadcast vote count update so everyone can see progress
+      const voteTally = {};
+      room.votes.forEach((tid, vid) => {
+        voteTally[tid] = (voteTally[tid] || 0) + 1;
+      });
+      io.to(room.roomCode).emit('s_vote_update', { voteTally, totalVoters: room.players.filter(p => p.isAlive).length });
+      
+      broadcastSanitizedRoomSnapshot(io, room);
+      const { checkAllReady } = require('./gameEngine');
+      checkAllReady(room, io);
+    } catch (err) {
+      console.error('[c_cast_vote] Error:', err);
+      socket.emit('s_error', { code: 'SERVER_ERROR', message: 'حدث خطأ في عملية التصويت' });
     }
-
-    const target = room.players.find(p => p.playerId === targetPlayerId);
-    if (!target || !target.isAlive) return;
-
-    room.votes.set(voter.playerId, targetPlayerId);
-    voter.isReady = true; // Auto-ready after voting
-    socket.emit('s_vote_accepted', { success: true, targetPlayerId });
-
-    // Broadcast vote count update so everyone can see progress
-    const voteTally = {};
-    room.votes.forEach((tid, vid) => {
-      voteTally[tid] = (voteTally[tid] || 0) + 1;
-    });
-    io.to(room.roomCode).emit('s_vote_update', { voteTally, totalVoters: room.players.filter(p => p.isAlive).length });
-    
-    broadcastSanitizedRoomSnapshot(io, room);
-    const { checkAllReady } = require('./gameEngine');
-    checkAllReady(room, io);
   });
   
   // ── 7.5 Ready Status ────────────────────────────────────────────────────────
