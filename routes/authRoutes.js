@@ -33,64 +33,9 @@ const loginLimiter = rateLimit({
 router.use(dbCheck);
 router.use(validateOrigin);
 
-// Register Endpoint
-router.post('/register', registerLimiter, async (req, res) => {
-  try {
-    const { username, email, password } = req.body || {};
-
-    if (!username || typeof username !== 'string' || username.trim().length < 3 || username.trim().length > 24) {
-      return res.status(400).json({ error: 'INVALID_USERNAME', message: 'اسم المستخدم يجب أن يكون بين 3 و 24 حرفاً.' });
-    }
-
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return res.status(400).json({ error: 'INVALID_EMAIL', message: 'البريد الإلكتروني غير صحيح.' });
-    }
-
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ error: 'WEAK_PASSWORD', message: 'كلمة المرور يجب أن لا تقل عن 6 أحرف.' });
-    }
-
-    const cleanUsername = username.trim();
-    const cleanEmail = email.trim().toLowerCase();
-
-    const existingEmail = await findUserByEmail(cleanEmail);
-    if (existingEmail) {
-      return res.status(400).json({ error: 'EMAIL_TAKEN', message: 'البريد الإلكتروني مسجل بالفعل.' });
-    }
-
-    const existingUser = await findUserByUsername(cleanUsername);
-    if (existingUser) {
-      return res.status(400).json({ error: 'USERNAME_TAKEN', message: 'اسم المستخدم مُستخدم بالفعل.' });
-    }
-
-    // ALWAYS force role = 'player' for public registration
-    const userDTO = await createUser({
-      username: cleanUsername,
-      email: cleanEmail,
-      password,
-      role: 'player',
-      coins: 0,
-    });
-
-    const token = generateToken(userDTO);
-
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
-    });
-
-    return res.status(201).json({
-      success: true,
-      token,
-      user: userDTO,
-    });
-  } catch (err) {
-    console.error('[Auth API] Register error:', err);
-    return res.status(500).json({ error: 'SERVER_ERROR', message: 'حدث خطأ غير متوقع أثناء التسجيل.' });
-  }
+// Register Endpoint (Disabled - Public registration is disabled)
+router.post('/register', (req, res) => {
+  return res.status(403).json({ error: 'REGISTRATION_DISABLED', message: 'التسجيل العام معطل حالياً.' });
 });
 
 // Login Endpoint

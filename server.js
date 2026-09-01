@@ -65,7 +65,9 @@ app.get(['/admin/dashboard', '/admin/dashboard.html', '/server/admin/dashboard.h
 });
 
 app.get(['/admin/register', '/admin/register.html', '/server/admin/register.html'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/admin/register.html'));
+  const passengerBase = req.headers['x-passenger-base-uri'] || req.headers['x-forwarded-prefix'] || '';
+  const prefix = passengerBase || ((req.originalUrl && req.originalUrl.startsWith('/server')) ? '/server' : '');
+  res.redirect(`${prefix}/admin/login.html`);
 });
 
 // Mount API routes supporting both standard and /server subpath for cPanel Passenger
