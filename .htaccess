@@ -1,8 +1,8 @@
-# cPanel Phusion Passenger & LiteSpeed WebSocket Rewrite Configuration
+# cPanel Phusion Passenger & LiteSpeed WebSocket Configuration
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # Proxy raw WebSocket upgrade requests for Socket.IO on LiteSpeed
+  # Pass raw WebSocket upgrade requests directly to Phusion Passenger Node.js application
   RewriteCond %{HTTP:Upgrade} =websocket [NC]
-  RewriteRule ^(.*)socket.io/(.*) ws://127.0.0.1:3001/socket.io/$2 [P,L]
+  RewriteRule ^(.*)socket.io/(.*) - [L]
 </IfModule>
