@@ -8,8 +8,7 @@ const { randomUUID } = require('crypto');
 class RoomManager {
   constructor() {
     this.rooms = new Map();
-    this.cleanupInterval = null;
-    this.startCleanupWorker();
+    this.cleanupTimeout = null;
   }
 
   generateRoomCode() {
@@ -70,6 +69,7 @@ class RoomManager {
 
     this.rooms.set(roomCode, room);
     this.saveRoomDb(room);
+    this.scheduleCleanup();
     return { room, hostPlayer, reconnectToken: rawReconnectToken };
   }
 
@@ -116,6 +116,7 @@ class RoomManager {
         rawData.nightActions = new Map(Object.entries(rawData.nightActions || {}));
         rawData.votes = new Map(Object.entries(rawData.votes || {}));
         this.rooms.set(code, rawData);
+        this.scheduleCleanup();
         console.log(`[RoomManager DB Load] Loaded room ${code} from DB into memory.`);
         return rawData;
       }
@@ -327,10 +328,14 @@ class RoomManager {
       player.disconnectTimeout = null;
       const activeRoom = this.rooms.get(roomCode);
       if (activeRoom && onDisconnectExpired && !player.isConnected) {
-        try {
-          onDisconnectExpired(activeRoom, player);
-        } catch (e) {
-          console.error(`[Room ${roomCode}] Error in onDisconnectExpired:`, e);
+        // Verify player is still in activeRoom.players and still disconnected
+        const isPlayerStillInRoom = activeRoom.players.some(p => p.playerId === player.playerId);
+        if (isPlayerStillInRoom && !player.isConnected) {
+          try {
+            onDisconnectExpired(activeRoom, player);
+          } catch (e) {
+            console.error(`[Room ${roomCode}] Error in onDisconnectExpired:`, e);
+          }
         }
       }
     }, 30_000);
@@ -347,6 +352,7 @@ class RoomManager {
         clearTimeout(room.phaseTimeout);
         room.phaseTimeout = null;
       }
+      room.phaseToken = null;
       if (room.timerInterval) {
         clearInterval(room.timerInterval);
         room.timerInterval = null;
@@ -370,46 +376,59 @@ class RoomManager {
       this.rooms.delete(code);
       this.deleteRoomDb(code);
       console.log(`[RoomManager] Room ${code} completely destroyed and purged from memory.`);
+      if (this.rooms.size === 0) {
+        this.stopCleanupWorker();
+      }
     }
   }
 
   /**
-   * Automated Periodic Room Garbage Collector.
-   * Runs every 60 seconds to purge abandoned, finished, or stale rooms.
+   * Safe Timeout-based Garbage Collector.
+   * Schedules a single timeout only when active rooms exist. 0 rooms = 0 background timers.
    */
-  startCleanupWorker(intervalMs = 60_000) {
-    if (this.cleanupInterval) return;
+  scheduleCleanup(delayMs = 60_000) {
+    if (this.cleanupTimeout) return;
+    if (this.rooms.size === 0) return;
 
-    this.cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      const roomsToDelete = [];
+    this.cleanupTimeout = setTimeout(() => {
+      this.performCleanup();
+    }, delayMs);
+  }
 
-      this.rooms.forEach((room, roomCode) => {
-        const connectedHumans = room.players.filter(p => !p.isBot && p.isConnected).length;
-        const inactiveMs = now - (room.lastActivityAt || room.createdAt || now);
+  performCleanup() {
+    this.cleanupTimeout = null;
+    const now = Date.now();
+    const roomsToDelete = [];
 
-        // Rule 1: Empty room with no connected human players for > 5 minutes
-        if (connectedHumans === 0 && inactiveMs > 5 * 60 * 1000) {
-          roomsToDelete.push(roomCode);
-        }
-        // Rule 2: Game finished (GAME_OVER) with no active humans, or finished > 3 minutes ago
-        else if (room.phase === 'GAME_OVER' && (connectedHumans === 0 || inactiveMs > 3 * 60 * 1000)) {
-          roomsToDelete.push(roomCode);
-        }
-        // Rule 3: Completely stale room with no activity for > 15 minutes
-        else if (inactiveMs > 15 * 60 * 1000) {
-          roomsToDelete.push(roomCode);
-        }
-      });
+    this.rooms.forEach((room, roomCode) => {
+      const connectedHumans = room.players.filter(p => !p.isBot && p.isConnected).length;
+      const inactiveMs = now - (room.lastActivityAt || room.createdAt || now);
 
-      roomsToDelete.forEach(code => this.removeRoom(code));
-    }, intervalMs);
+      // Rule 1: Completely empty room (0 connected human players) inactive for > 10 minutes (preserved per spec)
+      if (connectedHumans === 0 && inactiveMs > 10 * 60 * 1000) {
+        roomsToDelete.push(roomCode);
+      }
+      // Rule 2: Game finished (GAME_OVER) with no active humans, or finished > 3 minutes ago
+      else if (room.phase === 'GAME_OVER' && (connectedHumans === 0 || inactiveMs > 3 * 60 * 1000)) {
+        roomsToDelete.push(roomCode);
+      }
+      // Rule 3: Completely stale room with no activity for > 15 minutes
+      else if (inactiveMs > 15 * 60 * 1000) {
+        roomsToDelete.push(roomCode);
+      }
+    });
+
+    roomsToDelete.forEach(code => this.removeRoom(code));
+
+    if (this.rooms.size > 0) {
+      this.scheduleCleanup(60_000);
+    }
   }
 
   stopCleanupWorker() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
+    if (this.cleanupTimeout) {
+      clearTimeout(this.cleanupTimeout);
+      this.cleanupTimeout = null;
     }
   }
 }

@@ -1,12 +1,18 @@
 require('dotenv').config();
 
-// Global Crash Protection — Prevents cPanel Phusion Passenger Process Loop Crashes
+// Global Crash Protection — Synchronously stops timers and exits to allow process manager restart
 process.on('uncaughtException', (err) => {
-  console.error('[CRITICAL] Uncaught Exception:', err.stack || err);
+  console.error('[CRITICAL] Uncaught Exception:', err ? (err.stack || err) : err);
+  try {
+    if (roomManager && typeof roomManager.stopCleanupWorker === 'function') {
+      roomManager.stopCleanupWorker();
+    }
+  } catch (_) {}
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('[CRITICAL] Unhandled Rejection:', reason);
+  console.error('[CRITICAL] Unhandled Rejection:', reason ? (reason.stack || reason) : reason);
 });
 
 const express  = require('express');
@@ -24,7 +30,7 @@ const { sanitizeInput, isValidRoomCode, isValidPlayerId } = require('./sanitizer
 
 const roomManager  = require('./roomManager');
 const chatEngine   = require('./chatEngine');
-const { assignRoles, startPhase, advanceMatchLoop, broadcastSanitizedRoomSnapshot } = require('./gameEngine');
+const { assignRoles, startPhase, advanceMatchLoop, broadcastSanitizedRoomSnapshot, NIGHT_ACTIVE_ROLES } = require('./gameEngine');
 
 const { getDashboardHtml } = require('./dashboard');
 
@@ -409,6 +415,21 @@ io.on('connection', socket => {
       if (!actor || !actor.isAlive) {
         socket.emit('s_error', { code: 'PLAYER_DEAD', message: 'اللاعب غير متاح أو متوفى' });
         return;
+      }
+
+      // Check role eligibility
+      if (NIGHT_ACTIVE_ROLES && !NIGHT_ACTIVE_ROLES.has(actor.role)) {
+        socket.emit('s_error', { code: 'NO_NIGHT_ABILITY', message: 'ليس لديك قدرة ليلية' });
+        return;
+      }
+
+      // Validate target if specified
+      if (targetPlayerId) {
+        const target = room.players.find(p => p.playerId === targetPlayerId);
+        if (!target || !target.isAlive) {
+          socket.emit('s_error', { code: 'INVALID_TARGET', message: 'الهدف غير صالح أو متوفى' });
+          return;
+        }
       }
 
       // Idempotency check: Reject duplicate night action submission

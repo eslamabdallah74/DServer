@@ -193,6 +193,8 @@ function skipPhase(room, io) {
     room.timerInterval = null;
   }
   
+  room.phaseToken = null;
+
   if (room.phaseCallback) {
     const cb = room.phaseCallback;
     room.phaseCallback = null;
@@ -417,6 +419,7 @@ function tallyVotesAndEliminate(io, room) {
 module.exports = {
   assignRoles,
   startPhase,
+  skipPhase,
   advanceMatchLoop,
   broadcastSanitizedRoomSnapshot,
   checkAllReady,
