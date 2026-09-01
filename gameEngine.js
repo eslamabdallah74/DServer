@@ -226,45 +226,9 @@ function broadcastTimerTick(io, room, remainingSeconds) {
 // ─── Snapshot broadcaster ─────────────────────────────────────────────────────
 
 function broadcastSanitizedRoomSnapshot(io, room) {
-  room.players.forEach(p => {
-    if (!p.socketId) return;
-
-    const shadowAllies = p.faction === 'shadow'
-      ? room.players
-          .filter(a => a.faction === 'shadow' && a.playerId !== p.playerId)
-          .map(a => ({ playerId: a.playerId, nickname: a.nickname }))
-      : [];
-
-    const snapshot = {
-      roomCode:        room.roomCode,
-      eventSequence:   room.eventSequence,
-      serverTime:      Date.now(),
-      phase:           room.phase,
-      phaseStartedAt:  room.phaseStartedAt,
-      phaseEndsAt:     room.phaseEndsAt,
-      taskProgress:    room.taskProgress,
-      darknessActive:  room.darknessActive,
-      round:           room.round,
-      isHost:          p.isHost,
-      hasNightAction:  NIGHT_ACTIVE_ROLES.has(p.role),
-
-      myPlayer: {
-        playerId:       p.playerId,
-        nickname:       p.nickname,
-        role:           p.role,
-        faction:        p.faction,
-        isAlive:        p.isAlive,
-        isHost:         p.isHost,
-        statuses:       Array.from(p.statuses),
-        completedTasks: p.completedTasks,
-      },
-
-      shadowAllies,
-
-    io.to(p.socketId).emit('s_room_snapshot', snapshot);
-    io.to(p.socketId).emit('room:updated', snapshot);
-    io.to(p.socketId).emit('game:state', snapshot);
-  });
+  if (!room || !room.roomCode) return;
+  const snapshot = typeof room.toPublicSnapshot === 'function' ? room.toPublicSnapshot() : room;
+  broadcastToRoom(room.roomCode, 's_room_snapshot', { room: snapshot });
 }
 
 // ─── Match loop ───────────────────────────────────────────────────────────────
