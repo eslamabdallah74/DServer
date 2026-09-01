@@ -246,8 +246,41 @@ async function runPgMigrations() {
   }
 }
 
+async function ensureUsersSchemaValid() {
+  if (!pool || !dbConnected || getDbType() !== 'mysql') return;
+  try {
+    const [rows] = await pool.query('SHOW COLUMNS FROM users');
+    const existingCols = new Set(rows.map(r => r.Field.toLowerCase()));
+
+    if (!existingCols.has('username')) {
+      await pool.query('ALTER TABLE users ADD COLUMN username VARCHAR(50) NULL');
+      await pool.query('CREATE UNIQUE INDEX idx_users_username ON users(username)');
+    }
+    if (!existingCols.has('email')) {
+      await pool.query('ALTER TABLE users ADD COLUMN email VARCHAR(100) NULL');
+      await pool.query('CREATE UNIQUE INDEX idx_users_email ON users(email)');
+    }
+    if (!existingCols.has('password_hash')) {
+      await pool.query('ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NULL');
+    }
+    if (!existingCols.has('role')) {
+      await pool.query("ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'player'");
+    }
+    if (!existingCols.has('coins')) {
+      await pool.query('ALTER TABLE users ADD COLUMN coins INT NOT NULL DEFAULT 0');
+    }
+    if (!existingCols.has('is_banned')) {
+      await pool.query('ALTER TABLE users ADD COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0');
+    }
+  } catch (err) {
+    // If users table doesn't exist yet, migration 001 will create it
+  }
+}
+
 async function runMysqlMigrations() {
   if (!pool || !dbConnected) return;
+
+  await ensureUsersSchemaValid();
 
   try {
     await pool.query(`

@@ -8,5 +8,5 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   details JSON DEFAULT NULL,
   ip_address VARCHAR(45) DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE CASCADE
+  INDEX idx_admin_user_id (admin_user_id)
 );
