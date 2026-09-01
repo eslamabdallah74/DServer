@@ -92,11 +92,11 @@ async function createUser({ username, email, password, role = 'player', coins = 
     const user = await findUserById(newId);
     return sanitizeUserDTO(user);
   } else {
-    const [rows, result] = await query(
+    const [result] = await query(
       'INSERT INTO users (username, email, password_hash, role, coins) VALUES (?, ?, ?, ?, ?)',
       [username, email, passwordHash, finalRole, coins]
     );
-    const newId = result.insertId;
+    const newId = result ? result.insertId : null;
     const user = await findUserById(newId);
     return sanitizeUserDTO(user);
   }

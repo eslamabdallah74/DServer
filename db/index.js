@@ -1,3 +1,4 @@
+require('dotenv').config();
 const mysql = require('mysql2/promise');
 const { Pool: PgPool } = require('pg');
 const fs = require('fs');
@@ -25,11 +26,11 @@ function initPool() {
   // Priority 2: MySQL via env vars
   const host = process.env.DB_HOST || '127.0.0.1';
   const port = parseInt(process.env.DB_PORT || '3306', 10);
-  const user = process.env.DB_USER || 'root';
+  const user = process.env.DB_USER || process.env.DB_USERNAME || 'root';
   const password = process.env.DB_PASSWORD || '';
-  const database = process.env.DB_NAME || 'deceit_db';
+  const database = process.env.DB_NAME || process.env.DB_DATABASE || 'deceit_db';
 
-  if (!process.env.DB_HOST && !process.env.DB_NAME) {
+  if (!process.env.DB_HOST && !process.env.DB_NAME && !process.env.DB_DATABASE) {
     console.log('[DB] No database configured. Running in-memory mode.');
     return null;
   }
@@ -105,9 +106,9 @@ async function testConnectionAndMigrate() {
     } else {
       const host = process.env.DB_HOST || '127.0.0.1';
       const port = parseInt(process.env.DB_PORT || '3306', 10);
-      const user = process.env.DB_USER || 'root';
+      const user = process.env.DB_USER || process.env.DB_USERNAME || 'root';
       const password = process.env.DB_PASSWORD || '';
-      const database = process.env.DB_NAME || 'deceit_db';
+      const database = process.env.DB_NAME || process.env.DB_DATABASE || 'deceit_db';
       await ensureDatabaseExists(host, port, user, password, database);
 
       const conn = await pool.getConnection();
