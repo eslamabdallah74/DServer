@@ -659,6 +659,22 @@ if (!process.env.VERCEL) {
       console.warn('[DB] Non-fatal background migration error:', err.message);
     });
   });
+
+  // Dual-bind listener: If Passenger assigned a custom port/socket, also bind on 127.0.0.1:3001 for LiteSpeed WS Proxying
+  if (process.env.PORT && String(process.env.PORT) !== '3001') {
+    try {
+      const extraWsServer = http.createServer(app);
+      io.attach(extraWsServer);
+      extraWsServer.listen(3001, '127.0.0.1', () => {
+        console.log('[WebSocket Server] Dual-bound on 127.0.0.1:3001 for LiteSpeed WS Proxying');
+      });
+      extraWsServer.on('error', (err) => {
+        console.warn('[WebSocket Server Dual-Bind Warning]', err.message);
+      });
+    } catch (e) {
+      console.warn('[WebSocket Server Dual-Bind Exception]', e.message);
+    }
+  }
 }
 
 module.exports = app;
