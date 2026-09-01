@@ -1,4 +1,5 @@
 const { sanitizeInput } = require('./sanitizer');
+const { broadcastToRoom } = require('./src/pusherClient');
 
 class ChatEngine {
   constructor() {
@@ -72,20 +73,7 @@ class ChatEngine {
       room.chatHistory.shift();
     }
 
-    // Information Partitioning Broadcast
-    if (channel === 'PUBLIC') {
-      room.players.forEach(p => {
-        if (p.socketId) io.to(p.socketId).emit('s_chat_message', chatMsg);
-      });
-    } else if (channel === 'SHADOW') {
-      room.players.filter(p => p.faction === 'shadow' && p.socketId).forEach(p => {
-        io.to(p.socketId).emit('s_chat_message', chatMsg);
-      });
-    } else if (channel === 'DEAD') {
-      room.players.filter(p => !p.isAlive && p.socketId).forEach(p => {
-        io.to(p.socketId).emit('s_chat_message', chatMsg);
-      });
-    }
+    broadcastToRoom(room.roomCode, 's_chat_message', chatMsg);
 
     return { success: true, message: chatMsg };
   }

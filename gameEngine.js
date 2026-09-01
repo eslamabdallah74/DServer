@@ -146,7 +146,7 @@ function startPhase(io, room, phaseName, durationSeconds, onComplete) {
 
   console.log(`[Room ${room.roomCode}] Phase → ${phaseName} | ${durationSeconds}s | Round ${room.round}`);
 
-  io.to(room.roomCode).emit('s_phase_changed', {
+  broadcastToRoom(room.roomCode, 's_phase_changed', {
     eventSequence:  room.eventSequence,
     phase:          room.phase,
     phaseStartedAt: room.phaseStartedAt,
@@ -260,38 +260,6 @@ function broadcastSanitizedRoomSnapshot(io, room) {
       },
 
       shadowAllies,
-
-      players: room.players.map(pl => ({
-        playerId:    pl.playerId,
-        nickname:    pl.nickname,
-        isAlive:     pl.isAlive,
-        isHost:      pl.isHost,
-        isBot:       pl.isBot || false,
-        isConnected: pl.isConnected,
-        isReady:     pl.isReady,
-        // Reveal role only if dead AND setting is enabled
-        role: (!pl.isAlive && room.settings.revealEliminatedRole) ? pl.role : null,
-        faction: (!pl.isAlive && room.settings.revealEliminatedRole) ? pl.faction : null,
-      })),
-
-      // Morning/Elimination context
-      lastNightOutcome: room.lastNightOutcome ? {
-        killed:   (room.lastNightOutcome.killed   || []).map(k => ({ playerId: k.playerId, nickname: k.nickname, role: k.role })),
-        saved:    (room.lastNightOutcome.saved    || []).map(s => ({ playerId: s.playerId, nickname: s.nickname })),
-        silenced: (room.lastNightOutcome.silenced || []).map(s => ({ playerId: s.playerId, nickname: s.nickname })),
-        intel:    room.lastNightOutcome.intel?.filter(i => i.playerId === p.playerId) || [],
-      } : null,
-
-      lastEliminatedPlayer: room.lastEliminatedPlayer ? {
-        playerId: room.lastEliminatedPlayer.playerId,
-        nickname: room.lastEliminatedPlayer.nickname,
-        role:     room.lastEliminatedPlayer.role,
-        faction:  room.lastEliminatedPlayer.faction,
-        cause:    room.lastEliminatedCause,
-      } : null,
-
-      victoryOutcome: room.victoryOutcome || null,
-    };
 
     io.to(p.socketId).emit('s_room_snapshot', snapshot);
     io.to(p.socketId).emit('room:updated', snapshot);
