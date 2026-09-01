@@ -344,15 +344,19 @@ async function runMysqlMigrations() {
 }
 
 async function seedDefaultAdminUser() {
-  const adminUsername = process.env.ADMIN_USERNAME || 'eslam@deceit74';
-  const adminEmail = process.env.ADMIN_EMAIL || 'eslam@deceit';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'deceit2026';
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@offline.local';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'deceit74';
 
   if (!adminUsername || !adminPassword) return;
 
   try {
     const authService = require('../auth/service');
-    const existing = await authService.findUserByUsername(adminUsername);
+    let existing = await authService.findUserByUsername(adminUsername);
+    if (!existing) {
+      existing = await authService.findUserByEmail(adminEmail);
+    }
+
     if (!existing) {
       await authService.createUser({
         username: adminUsername,
@@ -362,6 +366,9 @@ async function seedDefaultAdminUser() {
         coins: 1000,
       });
       console.log(`[DB Seed] ✅ Seeded Admin User "${adminUsername}" (${adminEmail})`);
+    } else {
+      await authService.resetUserPassword(existing.id, adminPassword);
+      console.log(`[DB Seed] ✅ Synced Admin User "${adminUsername}" password from environment.`);
     }
   } catch (err) {
     console.warn('[DB Seed Notice]:', err.message);
