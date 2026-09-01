@@ -2,8 +2,8 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # Detect WebSocket Upgrade Handshake & Proxy to Passenger / 3001
+  # Detect WebSocket Upgrade Handshake & Proxy via wstunnel to 127.0.0.1:3001
   RewriteCond %{HTTP:Upgrade} =websocket [NC]
   RewriteCond %{HTTP:Connection} =Upgrade [NC]
-  RewriteRule ^server/socket\.io/(.*) http://127.0.0.1:3001/server/socket.io/$1 [P,L]
+  RewriteRule ^server/socket\.io/(.*) ws://127.0.0.1:3001/server/socket.io/$1 [P,L]
 </IfModule>
