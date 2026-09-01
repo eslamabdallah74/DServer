@@ -2,7 +2,8 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # Pass raw WebSocket upgrade requests directly to Phusion Passenger Node.js application
+  # Detect WebSocket Upgrade Handshake & Proxy to Passenger / 3001
   RewriteCond %{HTTP:Upgrade} =websocket [NC]
-  RewriteRule ^(.*)socket.io/(.*) - [L]
+  RewriteCond %{HTTP:Connection} =Upgrade [NC]
+  RewriteRule ^server/socket\.io/(.*) http://127.0.0.1:3001/server/socket.io/$1 [P,L]
 </IfModule>
