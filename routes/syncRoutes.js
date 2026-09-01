@@ -204,6 +204,56 @@ router.post('/:roomCode/chat', async (req, res) => {
   }
 });
 
+router.post('/:roomCode/add-bot', async (req, res) => {
+  try {
+    const { roomCode } = req.params;
+    const { playerId } = req.body || {};
+    await roomManager.loadRoomDb(roomCode);
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return res.status(404).json({ success: false, error: 'ROOM_NOT_FOUND' });
+
+    if (room.hostPlayerId !== playerId) {
+      return res.status(403).json({ success: false, error: 'NOT_HOST' });
+    }
+
+    const result = roomManager.addBot(roomCode);
+    if (result.error) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    await roomManager.saveRoomDb(result.room);
+    broadcastSanitizedRoomSnapshot(null, result.room);
+    return res.json({ success: true, room: result.room.toPublicSnapshot ? result.room.toPublicSnapshot() : result.room });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/:roomCode/remove-bot', async (req, res) => {
+  try {
+    const { roomCode } = req.params;
+    const { playerId, botPlayerId } = req.body || {};
+    await roomManager.loadRoomDb(roomCode);
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return res.status(404).json({ success: false, error: 'ROOM_NOT_FOUND' });
+
+    if (room.hostPlayerId !== playerId) {
+      return res.status(403).json({ success: false, error: 'NOT_HOST' });
+    }
+
+    const result = roomManager.removeBot(roomCode, botPlayerId);
+    if (result.error) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    await roomManager.saveRoomDb(result.room);
+    broadcastSanitizedRoomSnapshot(null, result.room);
+    return res.json({ success: true, room: result.room.toPublicSnapshot ? result.room.toPublicSnapshot() : result.room });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/:roomCode', async (req, res) => {
   try {
     const room = await roomManager.getRoomAsync(req.params.roomCode);
