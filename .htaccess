@@ -2,7 +2,7 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # Proxy raw WebSocket upgrade requests to Node.js application backend
+  # Proxy raw WebSocket upgrade requests for Socket.IO on LiteSpeed
   RewriteCond %{HTTP:Upgrade} =websocket [NC]
-  RewriteRule ^socket.io/(.*) ws://127.0.0.1:3001/socket.io/$1 [P,L]
+  RewriteRule ^(.*)socket.io/(.*) ws://127.0.0.1:3001/socket.io/$2 [P,L]
 </IfModule>
