@@ -172,13 +172,22 @@ class RoomManager {
     const room = this.getRoom(roomCode);
     if (!room)                                           return { error: 'ROOM_NOT_FOUND' };
     if (room.phase !== 'LOBBY')                          return { error: 'GAME_ALREADY_STARTED' };
+
+    const cleanName = (nickname || `لاعب_${Math.floor(1000 + Math.random() * 9000)}`).trim();
+
+    // Deduplicate: if player with exact nickname exists in lobby, replace them
+    const existingIndex = room.players.findIndex(p => p.nickname === cleanName && !p.isBot);
+    if (existingIndex !== -1) {
+      room.players.splice(existingIndex, 1);
+    }
+
     if (room.players.length >= room.settings.maxPlayers) return { error: 'ROOM_FULL' };
 
     const playerId          = `p_${crypto.randomUUID().substring(0, 8)}`;
     const rawReconnectToken = crypto.randomBytes(32).toString('hex');
     const tokenHash         = crypto.createHash('sha256').update(rawReconnectToken).digest('hex');
 
-    const player = _makePlayer(playerId, nickname || `لاعب_${Math.floor(1000 + Math.random() * 9000)}`, false, tokenHash);
+    const player = _makePlayer(playerId, cleanName, false, tokenHash);
 
     room.players.push(player);
     room.lastActivityAt = Date.now();

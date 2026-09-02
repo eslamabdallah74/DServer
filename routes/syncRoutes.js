@@ -254,6 +254,31 @@ router.post('/:roomCode/remove-bot', async (req, res) => {
   }
 });
 
+router.post('/:roomCode/leave', async (req, res) => {
+  try {
+    const { roomCode } = req.params;
+    const { playerId } = req.body || {};
+    await roomManager.loadRoomDb(roomCode);
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return res.status(404).json({ success: false, error: 'ROOM_NOT_FOUND' });
+
+    const result = roomManager.leaveRoom(roomCode, playerId);
+    if (result.error) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    if (result.roomDestroyed) {
+      broadcastToRoom(roomCode, 's_room_destroyed', { reason: 'No human players remaining.' });
+    } else if (result.room) {
+      await roomManager.saveRoomDb(result.room);
+      broadcastSanitizedRoomSnapshot(null, result.room);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/:roomCode', async (req, res) => {
   try {
     const room = await roomManager.getRoomAsync(req.params.roomCode);
