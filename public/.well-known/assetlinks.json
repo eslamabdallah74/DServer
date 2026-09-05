@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.deceit.game",
+      "sha256_cert_fingerprints": [
+        "42:1E:E5:12:BE:98:E0:26:90:ED:0C:76:34:71:6D:1F:54:FD:B4:34:90:82:BB:65:B7:85:68:F8:EB:9B:E1:34"
+      ]
+    }
+  }
+]

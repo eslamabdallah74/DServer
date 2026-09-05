@@ -52,6 +52,10 @@ app.use((req, res, next) => {
 });
 
 // Serve Web Admin Dashboard static files & explicit HTML fallback routes
+app.get(['/.well-known/assetlinks.json', '/server/.well-known/assetlinks.json'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/.well-known/assetlinks.json'));
+});
+
 app.use(['/admin', '/server/admin'], express.static(path.join(__dirname, 'public/admin')));
 app.use(express.static(path.join(__dirname, 'public/admin')));
 app.use(express.static(path.join(__dirname, 'public')));
