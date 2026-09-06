@@ -56,6 +56,11 @@ app.get(['/.well-known/assetlinks.json', '/server/.well-known/assetlinks.json'],
   res.sendFile(path.join(__dirname, 'public/.well-known/assetlinks.json'));
 });
 
+app.get(['/app-ads.txt', '/ads.txt', '/server/app-ads.txt', '/server/ads.txt'], (req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.sendFile(path.join(__dirname, 'public/app-ads.txt'));
+});
+
 app.use(['/admin', '/server/admin'], express.static(path.join(__dirname, 'public/admin')));
 app.use(express.static(path.join(__dirname, 'public/admin')));
 app.use(express.static(path.join(__dirname, 'public')));
