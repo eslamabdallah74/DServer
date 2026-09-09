@@ -78,13 +78,8 @@ class RoomManager {
     try {
       const { isDbConnected, query, getDbType } = require('./db');
       if (!isDbConnected()) return;
-      const serializableRoom = {
-        ...room,
-        nightActions: Object.fromEntries(room.nightActions || []),
-        votes: Object.fromEntries(room.votes || []),
-        timerInterval: null,
-        phaseCallback: null,
-      };
+      const { sanitizeRoomForJson } = require('./gameEngine');
+      const serializableRoom = sanitizeRoomForJson(room);
       const jsonStr = JSON.stringify(serializableRoom);
       if (getDbType() === 'pg') {
         await query(

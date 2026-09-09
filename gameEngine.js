@@ -12,6 +12,7 @@
 
 const { resolveNight }   = require('./nightResolver');
 const { evaluateVictory } = require('./victoryEngine');
+const { broadcastToRoom } = require('./src/pusherClient');
 
 // ─── Role definitions ────────────────────────────────────────────────────────
 
@@ -225,9 +226,33 @@ function broadcastTimerTick(io, room, remainingSeconds) {
 
 // ─── Snapshot broadcaster ─────────────────────────────────────────────────────
 
+function sanitizeRoomForJson(room) {
+  if (!room) return null;
+  const { timerInterval, phaseTimeout, phaseCallback, cleanupTimeout, ...cleanRoom } = room;
+  return {
+    ...cleanRoom,
+    timerInterval: null,
+    phaseTimeout: null,
+    phaseCallback: null,
+    cleanupTimeout: null,
+    nightActions: room.nightActions instanceof Map ? Object.fromEntries(room.nightActions) : (room.nightActions || {}),
+    votes: room.votes instanceof Map ? Object.fromEntries(room.votes) : (room.votes || {}),
+    players: (room.players || []).map(p => {
+      const { disconnectTimeout, socketId, reconnectTokenHash, ...cleanPlayer } = p;
+      return {
+        ...cleanPlayer,
+        disconnectTimeout: null,
+        socketId: null,
+        reconnectTokenHash: null,
+        statuses: cleanPlayer.statuses instanceof Set ? Array.from(cleanPlayer.statuses) : (cleanPlayer.statuses || []),
+      };
+    }),
+  };
+}
+
 function broadcastSanitizedRoomSnapshot(io, room) {
   if (!room || !room.roomCode) return;
-  const snapshot = typeof room.toPublicSnapshot === 'function' ? room.toPublicSnapshot() : room;
+  const snapshot = sanitizeRoomForJson(room);
   broadcastToRoom(room.roomCode, 's_room_snapshot', { room: snapshot });
 }
 
@@ -354,6 +379,7 @@ module.exports = {
   skipPhase,
   advanceMatchLoop,
   broadcastSanitizedRoomSnapshot,
+  sanitizeRoomForJson,
   checkAllReady,
   NIGHT_ACTIVE_ROLES,
 };

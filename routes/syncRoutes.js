@@ -58,7 +58,7 @@ router.get('/player/:id', authenticateToken, PlayerSyncController.getPlayer);
 const roomManager = require('../roomManager');
 const chatEngine = require('../chatEngine');
 const { broadcastToRoom } = require('../src/pusherClient');
-const { assignRoles, startPhase, broadcastSanitizedRoomSnapshot, checkAllReady } = require('../gameEngine');
+const { assignRoles, startPhase, broadcastSanitizedRoomSnapshot, sanitizeRoomForJson, checkAllReady } = require('../gameEngine');
 
 router.post('/create', async (req, res) => {
   try {
@@ -71,7 +71,7 @@ router.post('/create', async (req, res) => {
       roomCode: room.roomCode,
       playerId: hostPlayer.playerId,
       reconnectToken,
-      room: room.toPublicSnapshot ? room.toPublicSnapshot() : room,
+      room: sanitizeRoomForJson(room),
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -93,7 +93,7 @@ router.post('/join', async (req, res) => {
       roomCode: result.room.roomCode,
       playerId: result.player.playerId,
       reconnectToken: result.reconnectToken,
-      room: result.room.toPublicSnapshot ? result.room.toPublicSnapshot() : result.room,
+      room: sanitizeRoomForJson(result.room),
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -223,7 +223,7 @@ router.post('/:roomCode/add-bot', async (req, res) => {
 
     await roomManager.saveRoomDb(result.room);
     broadcastSanitizedRoomSnapshot(null, result.room);
-    return res.json({ success: true, room: result.room.toPublicSnapshot ? result.room.toPublicSnapshot() : result.room });
+    return res.json({ success: true, room: sanitizeRoomForJson(result.room) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -248,7 +248,7 @@ router.post('/:roomCode/remove-bot', async (req, res) => {
 
     await roomManager.saveRoomDb(result.room);
     broadcastSanitizedRoomSnapshot(null, result.room);
-    return res.json({ success: true, room: result.room.toPublicSnapshot ? result.room.toPublicSnapshot() : result.room });
+    return res.json({ success: true, room: sanitizeRoomForJson(result.room) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -279,13 +279,36 @@ router.post('/:roomCode/leave', async (req, res) => {
   }
 });
 
+router.post('/:roomCode/settings', async (req, res) => {
+  try {
+    const { roomCode } = req.params;
+    const { playerId, settings } = req.body || {};
+    await roomManager.loadRoomDb(roomCode);
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return res.status(404).json({ success: false, error: 'ROOM_NOT_FOUND' });
+
+    if (room.hostPlayerId !== playerId) {
+      return res.status(403).json({ success: false, error: 'NOT_HOST' });
+    }
+
+    if (settings && typeof settings === 'object') {
+      room.settings = { ...room.settings, ...settings };
+      await roomManager.saveRoomDb(room);
+      broadcastSanitizedRoomSnapshot(null, room);
+    }
+    return res.json({ success: true, room: sanitizeRoomForJson(room) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/:roomCode', async (req, res) => {
   try {
     const room = await roomManager.getRoomAsync(req.params.roomCode);
     if (!room) {
       return res.status(404).json({ success: false, error: 'ROOM_NOT_FOUND' });
     }
-    return res.json({ success: true, room: room.toPublicSnapshot ? room.toPublicSnapshot() : room });
+    return res.json({ success: true, room: sanitizeRoomForJson(room) });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

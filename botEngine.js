@@ -87,7 +87,8 @@ function handleBotActionsForPhase(room, io) {
               room.votes.forEach((tid) => {
                 voteTally[tid] = (voteTally[tid] || 0) + 1;
               });
-              io.to(room.roomCode).emit('s_vote_update', { 
+              const { broadcastToRoom } = require('./src/pusherClient');
+              broadcastToRoom(room.roomCode, 's_vote_update', { 
                 voteTally, 
                 totalVoters: room.players.filter(p => p.isAlive).length 
               });

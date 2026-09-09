@@ -26,10 +26,12 @@ class ChatEngine {
   }
 
   processMessage(io, room, player, text) {
-    if (!player || !player.socketId) return { error: 'NOT_CONNECTED' };
+    if (!player) return { error: 'PLAYER_NOT_FOUND' };
+
+    const clientKey = player.socketId || player.playerId || 'anon';
 
     // Rate limit check
-    if (!this.checkRateLimit(player.socketId)) {
+    if (!this.checkRateLimit(clientKey)) {
       return { error: 'RATE_LIMIT_EXCEEDED' };
     }
 
