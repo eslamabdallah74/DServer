@@ -65,3 +65,4 @@ class StressSimulationTest extends TestCase
         $this->assertGreaterThan(0, $result['executionTimeMs']);
     }
 }
+

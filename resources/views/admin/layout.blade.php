@@ -254,6 +254,9 @@
       <li class="nav-item {{ request()->is('admin/stress-test*') ? 'active' : '' }}">
         <a href="{{ route('admin.stressTest') }}"><i class="fa-solid fa-microchip"></i> محاكي الضغط والبوتات</a>
       </li>
+      <li class="nav-item {{ request()->is('admin/pusher*') ? 'active' : '' }}">
+        <a href="{{ route('admin.pusher') }}"><i class="fa-solid fa-satellite-dish"></i> مراقبة استهلاك Pusher</a>
+      </li>
       <li class="nav-item {{ request()->is('admin/players*') ? 'active' : '' }}">
         <a href="{{ route('admin.players') }}"><i class="fa-solid fa-users"></i> اللاعبين والعملات</a>
       </li>

@@ -55,3 +55,4 @@ class GameConfigServiceTest extends TestCase
         $this->assertEquals(['slasher', 'forger'], GameConfigService::getDisabledRoles());
     }
 }
+

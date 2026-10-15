@@ -118,3 +118,4 @@ class GameConfigService
         Cache::forget(self::CACHE_KEY);
     }
 }
+

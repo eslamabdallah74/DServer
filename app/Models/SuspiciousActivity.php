@@ -33,3 +33,4 @@ class SuspiciousActivity extends Model
         return $this->belongsTo(PlayerProfile::class, 'player_b_id', 'player_id');
     }
 }
+

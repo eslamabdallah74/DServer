@@ -21,3 +21,4 @@ return new class extends Migration
         Schema::dropIfExists('game_configurations');
     }
 };
+

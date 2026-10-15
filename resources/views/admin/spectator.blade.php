@@ -283,3 +283,4 @@
   setInterval(fetchLiveSnapshot, 3000);
 </script>
 @endsection
+

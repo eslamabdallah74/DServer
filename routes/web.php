@@ -88,4 +88,12 @@ Route::prefix('admin')->middleware(['auth'])->group(function () {
     // Bot Stress-Testing & Simulation Panel
     Route::get('/stress-test', [AdminDashboardController::class, 'stressTest'])->name('admin.stressTest');
     Route::post('/stress-test/run', [AdminDashboardController::class, 'runStressTest'])->name('admin.stressTest.run');
+
+    // Pusher WebSocket & Quota Monitor
+    Route::get('/pusher', [AdminDashboardController::class, 'pusherMonitor'])->name('admin.pusher');
+    Route::get('/pusher/live-stats', [AdminDashboardController::class, 'pusherLiveStats'])->name('admin.pusher.liveStats');
+    Route::post('/pusher/ping', [AdminDashboardController::class, 'pusherPing'])->name('admin.pusher.ping');
+    Route::post('/pusher/test-event', [AdminDashboardController::class, 'pusherSendTestEvent'])->name('admin.pusher.testEvent');
+    Route::get('/pusher/inspect-channel', [AdminDashboardController::class, 'pusherInspectChannel'])->name('admin.pusher.inspectChannel');
+    Route::post('/pusher/reset-stats', [AdminDashboardController::class, 'pusherResetStats'])->name('admin.pusher.resetStats');
 });

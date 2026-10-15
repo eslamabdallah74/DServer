@@ -592,4 +592,125 @@ class AdminDashboardController extends Controller
             ->with('stress_test_result', $result)
             ->with('success', "اكتملت محاكاة {$result['roomsSpawned']} غرف بنجاح خلال {$result['executionTimeMs']} ميلي ثانية!");
     }
+
+    /**
+     * Pusher Usage & Live WebSocket Monitor Screen.
+     */
+    public function pusherMonitor(): View
+    {
+        $stats = PusherService::getUsageStats();
+        $channelsApi = PusherService::getPusherApiChannels('room-');
+        $ping = PusherService::ping();
+
+        return view('admin.pusher', compact('stats', 'channelsApi', 'ping'));
+    }
+
+    /**
+     * Live stats endpoint for AJAX polling.
+     */
+    public function pusherLiveStats(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'stats' => PusherService::getUsageStats(),
+            'channelsApi' => PusherService::getPusherApiChannels('room-'),
+            'timestamp' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Ping Pusher server endpoint.
+     */
+    public function pusherPing(): JsonResponse
+    {
+        return response()->json(PusherService::ping());
+    }
+
+    /**
+     * Trigger a test broadcast event to a channel.
+     */
+    public function pusherSendTestEvent(Request $request): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'channel' => 'required|string|max:100',
+            'event'   => 'required|string|max:100',
+            'message' => 'nullable|string|max:500',
+        ]);
+
+        $channel = trim($validated['channel']);
+        $event = trim($validated['event']);
+        $msg = $validated['message'] ?: 'Live test broadcast from admin monitor';
+
+        $data = [
+            'test'      => true,
+            'message'   => $msg,
+            'sender'    => Auth::user()->username ?? 'Admin',
+            'timestamp' => time(),
+        ];
+
+        $success = PusherService::trigger($channel, $event, $data);
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'PUSHER_TEST_EVENT',
+            'details' => json_encode(['channel' => $channel, 'event' => $event, 'success' => $success]),
+            'ip_address' => $request->ip(),
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => $success,
+                'channel' => $channel,
+                'event' => $event,
+                'message' => $success ? "تم إرسال الحدث إلى {$channel} بنجاح!" : "فشل الإرسال إلى Pusher.",
+            ]);
+        }
+
+        return redirect()->route('admin.pusher')
+            ->with($success ? 'success' : 'error', $success ? "تم إرسال الحدث {$event} إلى القناة {$channel} بنجاح!" : "فشل إرسال الحدث إلى Pusher.");
+    }
+
+    /**
+     * Inspect channel details from Pusher REST API.
+     */
+    public function pusherInspectChannel(Request $request): JsonResponse
+    {
+        $request->validate([
+            'channel' => 'required|string|max:100',
+        ]);
+
+        $channel = trim($request->input('channel'));
+        $details = PusherService::getPusherChannelDetails($channel);
+
+        return response()->json([
+            'success' => true,
+            'channel' => $channel,
+            'details' => $details,
+        ]);
+    }
+
+    /**
+     * Reset recorded usage statistics.
+     */
+    public function pusherResetStats(Request $request): JsonResponse|RedirectResponse
+    {
+        PusherService::resetStats();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'RESET_PUSHER_STATS',
+            'details' => json_encode(['ip' => $request->ip()]),
+            'ip_address' => $request->ip(),
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تصفير إحصائيات Pusher بنجاح.',
+            ]);
+        }
+
+        return redirect()->route('admin.pusher')
+            ->with('success', 'تم تصفير إحصائيات استهلاك Pusher بنجاح.');
+    }
 }

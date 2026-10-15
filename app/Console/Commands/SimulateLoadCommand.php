@@ -43,3 +43,4 @@ class SimulateLoadCommand extends Command
         return Command::SUCCESS;
     }
 }
+

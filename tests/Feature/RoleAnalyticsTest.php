@@ -84,3 +84,4 @@ class RoleAnalyticsTest extends TestCase
         $response->assertSee('إجمالي العملات المتداولة');
     }
 }
+
