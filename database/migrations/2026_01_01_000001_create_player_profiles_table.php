@@ -16,6 +16,7 @@ return new class extends Migration
             $table->integer('stats_wins')->default(0);
             $table->integer('stats_losses')->default(0);
             $table->integer('stats_matches')->default(0);
+            $table->boolean('is_banned')->default(false);
             $table->timestamp('last_seen_at')->useCurrent();
             $table->timestamps();
         });

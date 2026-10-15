@@ -19,6 +19,7 @@ class PlayerProfile extends Model
         'stats_wins',
         'stats_losses',
         'stats_matches',
+        'is_banned',
         'last_seen_at',
     ];
 
@@ -27,6 +28,7 @@ class PlayerProfile extends Model
         'stats_wins' => 'integer',
         'stats_losses' => 'integer',
         'stats_matches' => 'integer',
+        'is_banned' => 'boolean',
         'last_seen_at' => 'datetime',
     ];
 

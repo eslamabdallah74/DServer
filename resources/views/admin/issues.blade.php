@@ -1,70 +1,133 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>البلاغات والمشاكل — Deceit Server</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <style>
-    :root {
-      --bg-dark: #0a0c10;
-      --card-bg: #12161f;
-      --border-color: rgba(255, 215, 0, 0.15);
-      --gold: #f59e0b;
-      --text-main: #f3f4f6;
-      --text-muted: #9ca3af;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background-color: var(--bg-dark); color: var(--text-main); display: flex; min-height: 100vh; }
-    .sidebar { width: 240px; background: #0f131a; border-left: 1px solid var(--border-color); padding: 24px 16px; flex-shrink: 0; }
-    .sidebar h2 { font-size: 18px; font-weight: 700; color: var(--gold); margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
-    .nav-link { display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 8px; font-size: 14px; }
-    .nav-link:hover, .nav-link.active { background: rgba(245, 158, 11, 0.15); color: var(--gold); }
-    .content { flex: 1; padding: 32px; overflow-y: auto; }
-    .table-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
-    table { width: 100%; border-collapse: collapse; text-align: right; }
-    th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 14px; }
-    th { color: var(--text-muted); }
-    .badge-error { background: rgba(239, 68, 68, 0.2); color: #fca5a5; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="sidebar">
-    <h2><i class="fa-solid fa-dragon"></i> Deceit Hub</h2>
-    <a href="{{ url('/admin/dashboard') }}" class="nav-link"><i class="fa-solid fa-chart-line"></i> الرئيسية</a>
-    <a href="{{ url('/admin/players') }}" class="nav-link"><i class="fa-solid fa-users"></i> اللاعبين</a>
-    <a href="{{ url('/admin/issues') }}" class="nav-link active"><i class="fa-solid fa-bug"></i> البلاغات والمشاكل</a>
+@extends('admin.layout')
+
+@section('title', 'بلاغات الأخطاء والمشاكل')
+@section('header_title')
+  <i class="fa-solid fa-bug" style="color: var(--gold);"></i>
+  <span>بلاغات الأخطاء والمشاكل التقنية</span>
+@endsection
+
+@section('content')
+<div class="card" style="margin-bottom: 24px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <a href="{{ route('admin.issues') }}" class="btn {{ !request('severity') ? 'btn-gold' : 'btn-outline' }}">الكل</a>
+      <a href="{{ route('admin.issues', ['severity' => 'critical']) }}" class="btn {{ request('severity') == 'critical' ? 'btn-red' : 'btn-outline' }}">
+        <i class="fa-solid fa-triangle-exclamation"></i> حرج (Critical)
+      </a>
+      <a href="{{ route('admin.issues', ['severity' => 'high']) }}" class="btn {{ request('severity') == 'high' ? 'btn-gold' : 'btn-outline' }}">
+        <i class="fa-solid fa-circle-exclamation"></i> عالي (High)
+      </a>
+      <a href="{{ route('admin.issues', ['severity' => 'medium']) }}" class="btn {{ request('severity') == 'medium' ? 'btn-blue' : 'btn-outline' }}">
+        متوسط (Medium)
+      </a>
+      <a href="{{ route('admin.issues', ['severity' => 'low']) }}" class="btn {{ request('severity') == 'low' ? 'btn-outline' : 'btn-outline' }}">
+        منخفض (Low)
+      </a>
+    </div>
+    <span style="font-size: 13px; color: var(--text-muted);">إجمالي البلاغات: {{ $issues->total() }}</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title"><i class="fa-solid fa-list-check"></i> سجل البلاغات المرفوعة من التطبيق</h3>
   </div>
 
-  <div class="content">
-    <h1>سجل البلاغات والأخطاء التقنية</h1>
-    <br>
-
-    <div class="table-card">
+  @if($issues->isEmpty())
+    <div style="text-align: center; padding: 48px; color: var(--text-muted);">
+      <i class="fa-solid fa-circle-check" style="font-size: 42px; color: var(--green); margin-bottom: 12px; display: block;"></i>
+      لا توجد بلاغات أخطاء مسجلة حالياً بهذا التصنيف.
+    </div>
+  @else
+    <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th>المستوى</th>
-            <th>الرسالة</th>
-            <th>الشاشة</th>
-            <th>التاريخ</th>
+            <th>#</th>
+            <th>الخطورة</th>
+            <th>النوع</th>
+            <th>الوصف / الخطأ</th>
+            <th>إصدار التطبيق</th>
+            <th>معرف اللاعب</th>
+            <th>التاريخ والوقت</th>
+            <th>التفاصيل</th>
           </tr>
         </thead>
         <tbody>
           @foreach($issues as $issue)
-          <tr>
-            <td><span class="badge-error">{{ strtoupper($issue->severity) }}</span></td>
-            <td>{{ $issue->message }}</td>
-            <td><code>{{ $issue->page ?: '/' }}</code></td>
-            <td>{{ $issue->created_at->diffForHumans() }}</td>
-          </tr>
+            <tr>
+              <td>#{{ $issue->id }}</td>
+              <td>
+                @if($issue->severity === 'critical')
+                  <span class="badge badge-red"><i class="fa-solid fa-fire"></i> حرج</span>
+                @elseif($issue->severity === 'high')
+                  <span class="badge badge-gold"><i class="fa-solid fa-triangle-exclamation"></i> عالي</span>
+                @elseif($issue->severity === 'medium')
+                  <span class="badge badge-blue">متوسط</span>
+                @else
+                  <span class="badge badge-outline">منخفض</span>
+                @endif
+              </td>
+              <td style="font-weight: 700;">{{ $issue->issue_type }}</td>
+              <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ $issue->description }}">
+                {{ $issue->description }}
+              </td>
+              <td><code style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">{{ $issue->app_version ?: 'N/A' }}</code></td>
+              <td><span style="font-family: monospace; color: var(--text-muted);">{{ $issue->player_id ?: 'غير مسجل' }}</span></td>
+              <td style="font-size: 12px; color: var(--text-muted);">{{ $issue->created_at ? $issue->created_at->format('Y/m/d H:i') : '-' }}</td>
+              <td>
+                <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick='viewIssueDetails(@json($issue))'>
+                  <i class="fa-solid fa-eye"></i> عرض
+                </button>
+              </td>
+            </tr>
           @endforeach
         </tbody>
       </table>
+    </div>
+    <div style="margin-top: 20px;">
+      {{ $issues->withQueryString()->links() }}
+    </div>
+  @endif
+</div>
 
-      <br>
-      {{ $issues->links() }}
+<!-- Issue Details Modal -->
+<div class="modal" id="issueModal">
+  <div class="modal-box" style="max-width: 680px;">
+    <div class="card-header">
+      <h3 class="card-title" id="issueModalTitle"><i class="fa-solid fa-bug"></i> تفاصيل الخطأ</h3>
+      <button type="button" onclick="closeIssueModal()" style="background: none; border: none; color: #999; font-size: 20px; cursor: pointer;">&times;</button>
+    </div>
+    <div style="margin-bottom: 16px;">
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">الوصف:</div>
+      <div id="issueModalDesc" style="background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.6; word-break: break-word;"></div>
+    </div>
+    <div style="margin-bottom: 16px;">
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">معلومات الجهاز والبيئة (Device Info):</div>
+      <pre id="issueModalDevice" style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 11px; max-height: 140px; overflow-y: auto; color: #a78bfa; direction: ltr; text-align: left;"></pre>
+    </div>
+    <div style="margin-bottom: 16px;">
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">أثر التتبع (Stack Trace):</div>
+      <pre id="issueModalStack" style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; font-size: 11px; max-height: 160px; overflow-y: auto; color: #f87171; direction: ltr; text-align: left;"></pre>
+    </div>
+    <div style="display: flex; justify-content: flex-end;">
+      <button type="button" class="btn btn-outline" onclick="closeIssueModal()">إغلاق</button>
     </div>
   </div>
-</body>
-</html>
+</div>
+@endsection
+
+@section('scripts')
+<script>
+  function viewIssueDetails(issue) {
+    document.getElementById('issueModalTitle').innerText = 'تفاصيل بلاغ #' + issue.id + ' (' + issue.issue_type + ')';
+    document.getElementById('issueModalDesc').innerText = issue.description || 'لا يوجد وصف إضافي.';
+    document.getElementById('issueModalDevice').innerText = typeof issue.device_info === 'object' ? JSON.stringify(issue.device_info, null, 2) : (issue.device_info || 'N/A');
+    document.getElementById('issueModalStack').innerText = issue.stack_trace || 'لا يتوفر Stack Trace.';
+    document.getElementById('issueModal').classList.add('active');
+  }
+  function closeIssueModal() {
+    document.getElementById('issueModal').classList.remove('active');
+  }
+</script>
+@endsection
