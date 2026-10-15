@@ -27,6 +27,29 @@ class PusherService
     }
 
     /**
+     * Test helper assertion for event dispatch.
+     */
+    public static function assertBroadcast(string $channel, string $eventName): void
+    {
+        $found = false;
+        foreach (self::$dispatchedEvents as $evt) {
+            if ($evt['channel'] === $channel && $evt['event'] === $eventName) {
+                $found = true;
+                break;
+            }
+        }
+
+        \PHPUnit\Framework\Assert::assertTrue($found, "Failed asserting that event '{$eventName}' was broadcast to channel '{$channel}'.");
+    }
+
+    public static function assertBroadcastToRoom(string $roomCode, string $eventName): void
+    {
+        $cleanCode = strtoupper(trim($roomCode));
+        $channel = "room-{$cleanCode}";
+        self::assertBroadcast($channel, $eventName);
+    }
+
+    /**
      * Broadcast an event to a room channel: room-{roomCode}
      */
     public static function broadcastToRoom(string $roomCode, string $eventName, array $data): bool

@@ -3,6 +3,7 @@
 namespace App\Services\GameEngine;
 
 use App\Models\MatchLog;
+use App\Models\PlayerProfile;
 use App\Services\PusherService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -39,18 +40,21 @@ class RoomManager
         $rawReconnectToken = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $rawReconnectToken);
 
+        $liveTimers = GameConfigService::getTimers();
         $defaultSettings = [
             'maxPlayers'           => 16,
-            'dayTimerSeconds'      => 120,
-            'nightTimerSeconds'    => 60,
-            'votingTimerSeconds'   => 60,
-            'tieRule'              => 'NO_ELIMINATION',
-            'kingMustSurvive'      => true,
+            'dayTimerSeconds'      => $liveTimers['dayTimerSeconds'],
+            'nightTimerSeconds'    => $liveTimers['nightTimerSeconds'],
+            'votingTimerSeconds'   => $liveTimers['votingTimerSeconds'],
+            'roleRevealTimerSeconds'=> $liveTimers['roleRevealTimerSeconds'],
+            'tieRule'              => GameConfigService::get('tie_rule', 'NO_ELIMINATION'),
+            'kingMustSurvive'      => GameConfigService::get('king_must_survive', true),
             'revealEliminatedRole' => true,
             'enabledRoleIds'       => [],
         ];
 
         $now = (int)(microtime(true) * 1000);
+        $clientIp = request()?->ip() ?? '127.0.0.1';
 
         $hostPlayer = [
             'playerId'           => $hostPlayerId,
@@ -61,6 +65,7 @@ class RoomManager
             'isAlive'            => true,
             'isConnected'        => true,
             'isReady'            => true,
+            'ip'                 => $clientIp,
             'reconnectTokenHash' => $tokenHash,
             'role'               => null,
             'faction'            => null,
@@ -142,6 +147,8 @@ class RoomManager
         $rawReconnectToken = bin2hex(random_bytes(32));
         $tokenHash = hash('sha256', $rawReconnectToken);
 
+        $clientIp = request()?->ip() ?? '127.0.0.1';
+
         $player = [
             'playerId'           => $playerId,
             'socketId'           => null,
@@ -151,6 +158,7 @@ class RoomManager
             'isAlive'            => true,
             'isConnected'        => true,
             'isReady'            => false,
+            'ip'                 => $clientIp,
             'reconnectTokenHash' => $tokenHash,
             'role'               => null,
             'faction'            => null,
@@ -422,7 +430,9 @@ class RoomManager
 
         // Assign roles and start ROLE_REVEAL phase
         RoleAssigner::assignRoles($room);
-        self::startPhase($room, 'ROLE_REVEAL', 8);
+        \App\Services\Moderation\AntiCheatEngine::detectTeaming($room);
+        $roleRevealTimer = (int)($room['settings']['roleRevealTimerSeconds'] ?? 8);
+        self::startPhase($room, 'ROLE_REVEAL', $roleRevealTimer);
 
         return ['success' => true, 'room' => $room];
     }
@@ -716,6 +726,27 @@ class RoomManager
                 'players_json' => $room['players'],
                 'duration_seconds' => max(1, $duration),
             ]);
+
+            // Award coins based on live configuration
+            $winReward = (int)GameConfigService::get('win_coin_reward', 50);
+            $lossReward = (int)GameConfigService::get('loss_coin_reward', 10);
+            $winningFaction = strtolower($victory['faction'] ?? ($victory['kind'] ?? ''));
+
+            foreach ($room['players'] as $player) {
+                if ($player['isBot'] ?? false) continue;
+                $profile = PlayerProfile::where('player_id', $player['playerId'])
+                    ->orWhere('nickname', $player['nickname'])
+                    ->first();
+                if ($profile) {
+                    $isWinner = !empty($player['faction']) && str_contains($winningFaction, strtolower($player['faction']));
+                    $coinsToAdd = $isWinner ? $winReward : $lossReward;
+                    $profile->increment('coins', $coinsToAdd);
+                    $profile->increment('matches_played');
+                    if ($isWinner) {
+                        $profile->increment('matches_won');
+                    }
+                }
+            }
         } catch (\Throwable $e) {
             Log::error("[RoomManager] Failed to record MatchLog: " . $e->getMessage());
         }
@@ -789,7 +820,7 @@ class RoomManager
     }
 
     /**
-     * Broadcast sanitized snapshot to room's Pusher channel.
+     * Broadcast sanitized snapshot to room's Pusher channel and God-Mode spectator channel.
      */
     public static function broadcastSnapshot(array $room): void
     {
@@ -798,6 +829,92 @@ class RoomManager
         PusherService::broadcastToRoom($room['roomCode'], 's_room_snapshot', [
             'room' => $snapshot,
         ]);
+
+        // Broadcast unredacted God-Mode snapshot to admin monitor channel
+        try {
+            $spectator = self::getSpectatorSnapshot($room['roomCode']);
+            if ($spectator) {
+                PusherService::trigger("admin-spectator-{$room['roomCode']}", 's_spectator_update', [
+                    'snapshot' => $spectator,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Ignore broadcast failure on admin channel if not listening
+        }
+    }
+
+    /**
+     * Build God-Mode unredacted spectator snapshot with vote heatmap and action targets.
+     */
+    public static function getSpectatorSnapshot(string $roomCode): ?array
+    {
+        $code = strtoupper(trim($roomCode));
+        $room = self::getRoom($code);
+        if (!$room) return null;
+
+        $now = (int)(microtime(true) * 1000);
+        $phaseEndsAt = $room['phaseEndsAt'] ?? 0;
+        $timeLeft = max(0, (int)ceil(($phaseEndsAt - $now) / 1000));
+
+        // Compute Vote Heatmap (who voted for whom and total count)
+        $voteHeatmap = [];
+        $votes = $room['votes'] ?? [];
+        foreach ($votes as $voterId => $targetId) {
+            if ($targetId) {
+                $voteHeatmap[$targetId] = ($voteHeatmap[$targetId] ?? 0) + 1;
+            }
+        }
+
+        // Night Action Targets mapping
+        $nightActions = $room['nightActions'] ?? [];
+
+        // Players dictionary for quick name lookups
+        $playerNames = [];
+        foreach ($room['players'] as $p) {
+            $playerNames[$p['playerId']] = $p['nickname'] ?? $p['playerId'];
+        }
+
+        $augmentedPlayers = array_map(function ($p) use ($nightActions, $votes, $voteHeatmap, $playerNames) {
+            $pid = $p['playerId'];
+            $nightTargetId = $nightActions[$pid]['targetPlayerId'] ?? ($p['nightAction']['targetPlayerId'] ?? null);
+            $voteTargetId = $votes[$pid] ?? ($p['vote'] ?? null);
+
+            return [
+                'playerId'        => $pid,
+                'nickname'        => $p['nickname'] ?? '',
+                'role'            => $p['role'] ?? 'لم يحدد',
+                'faction'         => $p['faction'] ?? 'kingdom',
+                'isAlive'         => (bool)($p['isAlive'] ?? true),
+                'isConnected'     => (bool)($p['isConnected'] ?? true),
+                'isBot'           => (bool)($p['isBot'] ?? false),
+                'isHost'          => (bool)($p['isHost'] ?? false),
+                'ip'              => $p['ip'] ?? '127.0.0.1',
+                'statuses'        => array_values($p['statuses'] ?? []),
+                'nightTargetId'   => $nightTargetId,
+                'nightTargetName' => $nightTargetId ? ($playerNames[$nightTargetId] ?? $nightTargetId) : null,
+                'voteTargetId'    => $voteTargetId,
+                'voteTargetName'  => $voteTargetId ? ($playerNames[$voteTargetId] ?? $voteTargetId) : null,
+                'incomingVotes'   => $voteHeatmap[$pid] ?? 0,
+            ];
+        }, $room['players'] ?? []);
+
+        return [
+            'roomCode'             => $code,
+            'phase'                => $room['phase'] ?? 'LOBBY',
+            'round'                => $room['round'] ?? 0,
+            'timeLeft'             => $timeLeft,
+            'taskProgress'         => $room['taskProgress'] ?? 0,
+            'darknessActive'       => $room['darknessActive'] ?? false,
+            'lastNightOutcome'     => $room['lastNightOutcome'] ?? null,
+            'lastEliminatedPlayer' => $room['lastEliminatedPlayer'] ?? null,
+            'lastEliminatedCause'  => $room['lastEliminatedCause'] ?? null,
+            'victoryOutcome'       => $room['victoryOutcome'] ?? null,
+            'chatHistory'          => $room['chatHistory'] ?? [],
+            'players'              => $augmentedPlayers,
+            'voteHeatmap'          => $voteHeatmap,
+            'totalPlayers'         => count($augmentedPlayers),
+            'alivePlayers'         => count(array_filter($augmentedPlayers, fn($p) => $p['isAlive'])),
+        ];
     }
 
     /**

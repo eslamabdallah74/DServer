@@ -49,6 +49,8 @@ Route::prefix('admin')->middleware(['auth'])->group(function () {
     
     // Live Match & Rooms Operations
     Route::get('/rooms', [AdminDashboardController::class, 'rooms'])->name('admin.rooms');
+    Route::get('/spectator/{roomCode}', [AdminDashboardController::class, 'spectator'])->name('admin.spectator');
+    Route::get('/spectator/{roomCode}/snapshot', [AdminDashboardController::class, 'spectatorSnapshot'])->name('admin.spectator.snapshot');
     Route::post('/rooms/{roomCode}/add-bot', [AdminDashboardController::class, 'addBotToRoom'])->name('admin.rooms.addBot');
     Route::post('/rooms/{roomCode}/next-phase', [AdminDashboardController::class, 'nextPhase'])->name('admin.rooms.nextPhase');
     Route::post('/rooms/{roomCode}/destroy', [AdminDashboardController::class, 'destroyRoom'])->name('admin.rooms.destroy');
@@ -71,4 +73,19 @@ Route::prefix('admin')->middleware(['auth'])->group(function () {
     Route::get('/issues', [AdminDashboardController::class, 'issues'])->name('admin.issues');
     Route::get('/feedback', [AdminDashboardController::class, 'feedback'])->name('admin.feedback');
     Route::get('/audit-logs', [AdminDashboardController::class, 'auditLogs'])->name('admin.auditLogs');
+
+    // Dynamic Live Config & Hot-Tuning
+    Route::get('/tuning', [AdminDashboardController::class, 'tuning'])->name('admin.tuning');
+    Route::post('/tuning', [AdminDashboardController::class, 'updateTuning'])->name('admin.tuning.update');
+
+    // Anti-Teaming & Moderation Suite
+    Route::get('/moderation', [AdminDashboardController::class, 'moderation'])->name('admin.moderation');
+    Route::post('/moderation/players/{id}/shadow-ban', [AdminDashboardController::class, 'toggleShadowBan'])->name('admin.moderation.shadowBan');
+    Route::post('/moderation/players/{id}/mute', [AdminDashboardController::class, 'mutePlayer'])->name('admin.moderation.mute');
+    Route::post('/moderation/activities/{id}/dismiss', [AdminDashboardController::class, 'dismissSuspiciousActivity'])->name('admin.moderation.dismiss');
+    Route::delete('/moderation/activities/{id}', [AdminDashboardController::class, 'dismissSuspiciousActivity']);
+
+    // Bot Stress-Testing & Simulation Panel
+    Route::get('/stress-test', [AdminDashboardController::class, 'stressTest'])->name('admin.stressTest');
+    Route::post('/stress-test/run', [AdminDashboardController::class, 'runStressTest'])->name('admin.stressTest.run');
 });

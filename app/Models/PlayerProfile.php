@@ -20,6 +20,9 @@ class PlayerProfile extends Model
         'stats_losses',
         'stats_matches',
         'is_banned',
+        'is_shadow_banned',
+        'muted_until',
+        'last_ip',
         'last_seen_at',
     ];
 
@@ -29,8 +32,20 @@ class PlayerProfile extends Model
         'stats_losses' => 'integer',
         'stats_matches' => 'integer',
         'is_banned' => 'boolean',
+        'is_shadow_banned' => 'boolean',
+        'muted_until' => 'datetime',
         'last_seen_at' => 'datetime',
     ];
+
+    public function isMuted(): bool
+    {
+        return $this->muted_until !== null && $this->muted_until->isFuture();
+    }
+
+    public function isShadowBanned(): bool
+    {
+        return (bool)$this->is_shadow_banned;
+    }
 
     public function getOwnedRolesAttribute(): array
     {

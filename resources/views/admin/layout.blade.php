@@ -239,11 +239,20 @@
       <li class="nav-item {{ request()->is('admin') || request()->is('admin/dashboard') ? 'active' : '' }}">
         <a href="{{ route('admin.dashboard') }}"><i class="fa-solid fa-chart-pie"></i> نظرة عامة</a>
       </li>
-      <li class="nav-item {{ request()->is('admin/rooms*') ? 'active' : '' }}">
-        <a href="{{ route('admin.rooms') }}"><i class="fa-solid fa-gamepad"></i> الغرف الحية واللعب</a>
+      <li class="nav-item {{ request()->is('admin/rooms*') || request()->is('admin/spectator*') ? 'active' : '' }}">
+        <a href="{{ route('admin.rooms') }}"><i class="fa-solid fa-gamepad"></i> الغرف الحية والمراقبة</a>
       </li>
       <li class="nav-item {{ request()->is('admin/analytics*') ? 'active' : '' }}">
-        <a href="{{ route('admin.analytics') }}"><i class="fa-solid fa-chart-line"></i> تحليلات اللعبة</a>
+        <a href="{{ route('admin.analytics') }}"><i class="fa-solid fa-chart-line"></i> تحليلات وتوازن الأدوار</a>
+      </li>
+      <li class="nav-item {{ request()->is('admin/moderation*') ? 'active' : '' }}">
+        <a href="{{ route('admin.moderation') }}"><i class="fa-solid fa-user-shield"></i> مكافحة التحالف والرقابة</a>
+      </li>
+      <li class="nav-item {{ request()->is('admin/tuning*') ? 'active' : '' }}">
+        <a href="{{ route('admin.tuning') }}"><i class="fa-solid fa-sliders"></i> الضبط المباشر (Tuning)</a>
+      </li>
+      <li class="nav-item {{ request()->is('admin/stress-test*') ? 'active' : '' }}">
+        <a href="{{ route('admin.stressTest') }}"><i class="fa-solid fa-microchip"></i> محاكي الضغط والبوتات</a>
       </li>
       <li class="nav-item {{ request()->is('admin/players*') ? 'active' : '' }}">
         <a href="{{ route('admin.players') }}"><i class="fa-solid fa-users"></i> اللاعبين والعملات</a>

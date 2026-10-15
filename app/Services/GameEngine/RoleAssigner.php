@@ -13,6 +13,21 @@ class RoleAssigner
         $count = count($players);
         $pool = RoleData::getCompositionPool($count);
 
+        // Filter out globally disabled roles
+        $disabledRoles = GameConfigService::getDisabledRoles();
+        if (!empty($disabledRoles)) {
+            foreach ($pool as $idx => $role) {
+                if (in_array($role, $disabledRoles, true) && $role !== 'king') {
+                    $faction = RoleData::getFaction($role);
+                    if ($faction === 'shadow') {
+                        $pool[$idx] = 'assassin';
+                    } else {
+                        $pool[$idx] = 'citizen';
+                    }
+                }
+            }
+        }
+
         // Fisher-Yates shuffle on pool
         for ($i = count($pool) - 1; $i > 0; $i--) {
             $j = rand(0, $i);

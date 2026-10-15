@@ -6,9 +6,15 @@ use App\Models\AppIssue;
 use App\Models\AuditLog;
 use App\Models\MatchLog;
 use App\Models\PlayerProfile;
+use App\Models\SuspiciousActivity;
 use App\Models\UserFeedback;
+use App\Services\Analytics\RoleAnalyticsService;
+use App\Services\GameEngine\GameConfigService;
+use App\Services\GameEngine\RoleData;
 use App\Services\GameEngine\RoomManager;
+use App\Services\GameEngine\StressTestService;
 use App\Services\PusherService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -265,6 +271,9 @@ class AdminDashboardController extends Controller
 
         $matches = MatchLog::orderBy('created_at', 'desc')->paginate(15);
 
+        $roleMatrix = RoleAnalyticsService::getRoleMatrix();
+        $economyMetrics = RoleAnalyticsService::getEconomyMetrics();
+
         return view('admin.analytics', compact(
             'totalMatches',
             'avgDuration',
@@ -274,7 +283,9 @@ class AdminDashboardController extends Controller
             'kingdomPercent',
             'shadowPercent',
             'neutralPercent',
-            'matches'
+            'matches',
+            'roleMatrix',
+            'economyMetrics'
         ));
     }
 
@@ -366,5 +377,219 @@ class AdminDashboardController extends Controller
     {
         $logs = AuditLog::orderBy('created_at', 'desc')->paginate(30);
         return view('admin.audit-logs', compact('logs'));
+    }
+
+    /**
+     * Live Game Configuration & Hot-Tuning View.
+     */
+    public function tuning(): View
+    {
+        $configs = GameConfigService::getAll();
+        $allRoles = RoleData::getAllRoles();
+        $disabledRoles = GameConfigService::getDisabledRoles();
+
+        return view('admin.tuning', compact('configs', 'allRoles', 'disabledRoles'));
+    }
+
+    /**
+     * Update Live Game Configuration.
+     */
+    public function updateTuning(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'dayTimerSeconds'         => 'required|integer|min:15|max:600',
+            'nightTimerSeconds'       => 'required|integer|min:15|max:300',
+            'votingTimerSeconds'      => 'required|integer|min:15|max:300',
+            'roleRevealTimerSeconds'  => 'required|integer|min:3|max:30',
+            'winCoinReward'           => 'required|integer|min:0|max:1000',
+            'lossCoinReward'          => 'required|integer|min:0|max:500',
+            'tieRule'                 => 'required|string|in:NO_ELIMINATION,RANDOM_ELIMINATION',
+            'kingMustSurvive'         => 'nullable|boolean',
+            'disabledRoles'           => 'nullable|array',
+            'disabledRoles.*'         => 'string',
+        ]);
+
+        GameConfigService::set('day_timer_seconds', $validated['dayTimerSeconds'], 'Day cycle duration in seconds');
+        GameConfigService::set('night_timer_seconds', $validated['nightTimerSeconds'], 'Night cycle duration in seconds');
+        GameConfigService::set('voting_timer_seconds', $validated['votingTimerSeconds'], 'Daytime voting duration in seconds');
+        GameConfigService::set('role_reveal_timer_seconds', $validated['roleRevealTimerSeconds'], 'Role reveal banner duration');
+        GameConfigService::set('win_coin_reward', $validated['winCoinReward'], 'Coins awarded to match winners');
+        GameConfigService::set('loss_coin_reward', $validated['lossCoinReward'], 'Coins awarded to match losers');
+        GameConfigService::set('tie_rule', $validated['tieRule'], 'Voting tie breaker behavior');
+        GameConfigService::set('king_must_survive', $request->boolean('kingMustSurvive'), 'Kingdom condition: King must survive');
+        GameConfigService::set('disabled_roles', $request->input('disabledRoles', []), 'List of temporarily disabled role IDs');
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'UPDATE_GAME_TUNING',
+            'details' => json_encode($validated),
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', 'تم حفظ وتطبيق إعدادات اللعبة الحية فورياً بنجاح.');
+    }
+
+    /**
+     * Anti-Teaming & Moderation Suite.
+     */
+    public function moderation(Request $request): View
+    {
+        $statusFilter = $request->input('status', 'all');
+        $query = SuspiciousActivity::query()->with(['playerA', 'playerB']);
+
+        if ($statusFilter !== 'all') {
+            $query->where('status', $statusFilter);
+        }
+
+        $activities = $query->orderBy('created_at', 'desc')->paginate(20);
+        $pendingAlertsCount = SuspiciousActivity::where('status', 'pending')->count();
+        $shadowBannedCount = PlayerProfile::where('is_shadow_banned', true)->count();
+        $mutedCount = PlayerProfile::whereNotNull('muted_until')->where('muted_until', '>', now())->count();
+
+        return view('admin.moderation', compact('activities', 'pendingAlertsCount', 'shadowBannedCount', 'mutedCount', 'statusFilter'));
+    }
+
+    /**
+     * Toggle shadow ban on a player.
+     */
+    public function toggleShadowBan(string $id): RedirectResponse
+    {
+        $player = PlayerProfile::findOrFail($id);
+        $player->is_shadow_banned = !$player->is_shadow_banned;
+        $player->save();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => $player->is_shadow_banned ? 'SHADOW_BAN_PLAYER' : 'UN_SHADOW_BAN_PLAYER',
+            'details' => json_encode(['playerId' => $id, 'nickname' => $player->nickname]),
+            'ip_address' => request()->ip(),
+        ]);
+
+        $status = $player->is_shadow_banned ? 'تفعيل الحظر الخفي' : 'إلغاء الحظر الخفي';
+        return back()->with('success', "تم {$status} للاعب {$player->nickname} بنجاح.");
+    }
+
+    /**
+     * Mute player from game chat for specified duration in minutes.
+     */
+    public function mutePlayer(Request $request, string $id): RedirectResponse
+    {
+        $durationMinutes = (int)$request->input('duration', 1440); // default 24h
+        $player = PlayerProfile::findOrFail($id);
+
+        if ($durationMinutes <= 0) {
+            $player->muted_until = null;
+            $msg = "تم رفع الكتم عن اللاعب {$player->nickname}.";
+            $action = 'UNMUTE_PLAYER';
+        } else {
+            $player->muted_until = now()->addMinutes($durationMinutes);
+            $hours = round($durationMinutes / 60, 1);
+            $msg = "تم كتم اللاعب {$player->nickname} لمدة {$hours} ساعة.";
+            $action = 'MUTE_PLAYER';
+        }
+
+        $player->save();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => $action,
+            'details' => json_encode(['playerId' => $id, 'durationMinutes' => $durationMinutes]),
+            'ip_address' => request()->ip(),
+        ]);
+
+        return back()->with('success', $msg);
+    }
+
+    /**
+     * Dismiss or delete suspicious activity alert.
+     */
+    public function dismissSuspiciousActivity(string $id): RedirectResponse
+    {
+        $activity = SuspiciousActivity::findOrFail($id);
+        $activity->status = 'dismissed';
+        $activity->save();
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'DISMISS_SUSPICIOUS_ACTIVITY',
+            'details' => json_encode(['activityId' => $id, 'reason' => $activity->reason]),
+            'ip_address' => request()->ip(),
+        ]);
+
+        return back()->with('success', 'تم تجاهل البلاغ بنجاح.');
+    }
+
+    /**
+     * Live God-Mode Room Spectator Screen.
+     */
+    public function spectator(string $roomCode): View|RedirectResponse
+    {
+        $code = strtoupper(trim($roomCode));
+        $snapshot = RoomManager::getSpectatorSnapshot($code);
+
+        if (!$snapshot) {
+            return redirect()->route('admin.rooms')->with('error', "الغرفة {$code} غير موجودة أو انتهت صلاحيتها.");
+        }
+
+        return view('admin.spectator', compact('snapshot', 'code'));
+    }
+
+    /**
+     * Unredacted JSON snapshot endpoint for live AJAX polling.
+     */
+    public function spectatorSnapshot(string $roomCode): JsonResponse
+    {
+        $code = strtoupper(trim($roomCode));
+        $snapshot = RoomManager::getSpectatorSnapshot($code);
+
+        if (!$snapshot) {
+            return response()->json(['error' => 'ROOM_NOT_FOUND'], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'snapshot' => $snapshot,
+        ]);
+    }
+
+    /**
+     * Bot Stress-Testing Panel Screen.
+     */
+    public function stressTest(): View
+    {
+        $lastResult = session('stress_test_result');
+        return view('admin.stress-test', compact('lastResult'));
+    }
+
+    /**
+     * Trigger bot stress-test simulation.
+     */
+    public function runStressTest(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'roomCount'   => 'required|integer|min:1|max:20',
+            'botsPerRoom' => 'required|integer|min:3|max:16',
+        ]);
+
+        $result = StressTestService::runSimulation(
+            (int)$validated['roomCount'],
+            (int)$validated['botsPerRoom']
+        );
+
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'RUN_BOT_STRESS_TEST',
+            'details' => json_encode([
+                'roomCount' => $validated['roomCount'],
+                'botsPerRoom' => $validated['botsPerRoom'],
+                'executionTimeMs' => $result['executionTimeMs'],
+                'totalPlayers' => $result['totalPlayers'],
+            ]),
+            'ip_address' => $request->ip(),
+        ]);
+
+        return redirect()->route('admin.stressTest')
+            ->with('stress_test_result', $result)
+            ->with('success', "اكتملت محاكاة {$result['roomsSpawned']} غرف بنجاح خلال {$result['executionTimeMs']} ميلي ثانية!");
     }
 }

@@ -49,6 +49,10 @@
 
           <!-- Room Actions -->
           <div style="display: flex; gap: 8px;">
+            <a href="{{ route('admin.spectator', $room['roomCode']) }}" class="btn btn-gold" style="font-size: 12px; padding: 6px 12px;">
+              <i class="fa-solid fa-eye"></i> وضع المراقب
+            </a>
+
             @if($phase === 'LOBBY')
               <form action="{{ route('admin.rooms.addBot', $room['roomCode']) }}" method="POST">
                 @csrf

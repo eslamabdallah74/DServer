@@ -2,6 +2,8 @@
 
 namespace App\Services\GameEngine;
 
+use App\Models\PlayerProfile;
+use App\Services\Moderation\AntiCheatEngine;
 use App\Services\PusherService;
 use Illuminate\Support\Str;
 
@@ -14,7 +16,19 @@ class ChatEngine
             return ['error' => 'EMPTY_MESSAGE'];
         }
 
-        // Check if player is silenced
+        // Check if player profile is muted by administration
+        $profile = PlayerProfile::where('player_id', $player['playerId'])
+            ->orWhere('nickname', $player['nickname'])
+            ->first();
+        if ($profile && $profile->isMuted()) {
+            return [
+                'error' => 'PLAYER_MUTED',
+                'message' => 'أنت ممنوع مؤقتاً من الدردشة بواسطة المشرف.',
+                'mutedUntil' => $profile->muted_until?->toIso8601String(),
+            ];
+        }
+
+        // Check if player is silenced by game role
         $statuses = $player['statuses'] ?? [];
         if (in_array('SILENCED', $statuses, true)) {
             return ['error' => 'PLAYER_SILENCED'];
@@ -24,6 +38,16 @@ class ChatEngine
         $phase = $room['phase'] ?? 'LOBBY';
         if ($phase !== 'LOBBY' && !($player['isAlive'] ?? true)) {
             return ['error' => 'DEAD_PLAYERS_CANNOT_CHAT'];
+        }
+
+        // Automated toxicity & role leak watchdog
+        $toxicity = AntiCheatEngine::checkChatToxicity($cleanText, $player['playerId'], $room['roomCode'] ?? null);
+        if ($toxicity['toxic'] ?? false) {
+            return [
+                'error' => 'MESSAGE_BLOCKED_TOXIC',
+                'message' => 'تم حجب الرسالة لمخالفتها الآداب العامة وقواعد اللعبة.',
+                'reason' => $toxicity['reason'],
+            ];
         }
 
         $now = (int)(microtime(true) * 1000);
