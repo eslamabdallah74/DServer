@@ -162,3 +162,4 @@ class PusherMonitorTest extends TestCase
         $this->assertEquals('2 MB', PusherService::formatBytes(2097152));
     }
 }
+
