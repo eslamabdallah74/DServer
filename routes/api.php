@@ -44,16 +44,26 @@ Route::prefix('rooms')->group(function () {
     Route::get('/{roomCode}/sync', [RoomApiController::class, 'sync']);
 });
 
+// General & Public API Endpoints
+Route::get('/announcement', [PlayerSyncController::class, 'getAnnouncement']);
+
 // Player profile sync, Issues & Feedback Endpoints (with fallback / JWT authentication)
 Route::middleware([ValidateJwtSecret::class])->group(function () {
     Route::post('/sync/player', [PlayerSyncController::class, 'sync']);
     Route::get('/sync/player/{id}', [PlayerSyncController::class, 'getPlayer']);
+    Route::post('/player', [PlayerSyncController::class, 'upsertPlayer']);
+    Route::get('/player/{id}', [PlayerSyncController::class, 'getPlayer']);
     Route::post('/players', [PlayerSyncController::class, 'upsertPlayer']);
     Route::get('/players', [PlayerSyncController::class, 'getPlayers']);
+
+    Route::post('/coins/increment', [PlayerSyncController::class, 'incrementCoins']);
+    Route::post('/coins/decrement', [PlayerSyncController::class, 'decrementCoins']);
+    Route::post('/matches/log', [PlayerSyncController::class, 'logMatch']);
 
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
     Route::post('/issues', [IssueController::class, 'logIssue']);
+    Route::get('/issues', [IssueController::class, 'getIssues']);
     Route::post('/feedback', [IssueController::class, 'submitFeedback']);
 });

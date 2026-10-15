@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class PlayerSyncTest extends TestCase
@@ -26,7 +27,7 @@ class PlayerSyncTest extends TestCase
             'playerId' => 'device_laravel_test_99',
             'nickname' => 'LaravelPlayer',
             'coins' => 750,
-            'ownedRoles' => ['doctor', 'detective'],
+            'ownedRoles' => ['doctor', 'investigator'],
             'stats' => [
                 'wins' => 5,
                 'losses' => 2,
@@ -76,5 +77,70 @@ class PlayerSyncTest extends TestCase
                          'coins' => 500,
                      ]
                  ]);
+    }
+
+    public function test_coins_increment_and_decrement(): void
+    {
+        $headers = ['x-jwt-secret' => 'deceit_offline_super_secret_jwt_key_2026_998877665544332211'];
+
+        // Initial sync
+        $this->withHeaders($headers)->postJson('/api/player', [
+            'playerId' => 'player_coin_test',
+            'coins' => 100,
+        ]);
+
+        // Increment by 50 -> 150
+        $incRes = $this->withHeaders($headers)->postJson('/api/coins/increment', [
+            'playerId' => 'player_coin_test',
+            'amount' => 50,
+        ]);
+        $incRes->assertStatus(200);
+        $this->assertEquals(150, $incRes->json('coins'));
+
+        // Decrement by 30 -> 120
+        $decRes = $this->withHeaders($headers)->postJson('/api/coins/decrement', [
+            'playerId' => 'player_coin_test',
+            'amount' => 30,
+        ]);
+        $decRes->assertStatus(200);
+        $this->assertEquals(120, $decRes->json('coins'));
+    }
+
+    public function test_announcement_endpoint(): void
+    {
+        Cache::put('latest_system_broadcast', ['message' => 'تحديث تجريبي'], 60);
+
+        $res = $this->getJson('/api/announcement');
+        $res->assertStatus(200);
+        $this->assertEquals('تحديث تجريبي', $res->json('announcement.message'));
+    }
+
+    public function test_log_match_and_issues(): void
+    {
+        $headers = ['x-jwt-secret' => 'deceit_offline_super_secret_jwt_key_2026_998877665544332211'];
+
+        // Log match
+        $matchRes = $this->withHeaders($headers)->postJson('/api/matches/log', [
+            'roomCode' => 'TEST',
+            'winnerTeam' => 'KINGDOM',
+            'playerCount' => 6,
+            'durationSeconds' => 180,
+        ]);
+        $matchRes->assertStatus(200);
+        $this->assertTrue($matchRes->json('success'));
+
+        // Log issue
+        $issueRes = $this->withHeaders($headers)->postJson('/api/issues', [
+            'severity' => 'error',
+            'message' => 'Connection timeout on voting phase',
+            'page' => 'VotingScene',
+        ]);
+        $issueRes->assertStatus(200);
+        $this->assertTrue($issueRes->json('success'));
+
+        // Get issues
+        $getIssuesRes = $this->withHeaders($headers)->getJson('/api/issues');
+        $getIssuesRes->assertStatus(200);
+        $this->assertNotEmpty($getIssuesRes->json('data'));
     }
 }

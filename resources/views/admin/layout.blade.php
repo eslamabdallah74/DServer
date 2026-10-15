@@ -26,7 +26,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', system-ui, sans-serif; }
     body { background-color: var(--bg-dark); color: var(--text-main); display: flex; min-height: 100vh; }
-    
+
     /* Sidebar */
     .sidebar {
       width: 260px;
@@ -58,7 +58,7 @@
     }
     .brand-text h2 { font-size: 17px; font-weight: 800; color: #fff; }
     .brand-text span { font-size: 11px; color: var(--gold); letter-spacing: 0.5px; }
-    
+
     .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 6px; flex: 1; }
     .nav-item a {
       display: flex;
@@ -92,7 +92,7 @@
     }
     .page-title { font-size: 20px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 10px; }
     .topbar-actions { display: flex; align-items: center; gap: 14px; }
-    
+
     .content-body { padding: 32px; overflow-y: auto; flex: 1; }
 
     /* Buttons & Badges */
@@ -337,3 +337,4 @@
   @yield('scripts')
 </body>
 </html>
+

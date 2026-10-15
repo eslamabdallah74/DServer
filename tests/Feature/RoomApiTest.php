@@ -164,3 +164,4 @@ class RoomApiTest extends TestCase
         $this->assertNull(RoomManager::getRoom($roomCode));
     }
 }
+

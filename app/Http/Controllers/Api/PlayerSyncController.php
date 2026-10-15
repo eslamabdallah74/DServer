@@ -150,4 +150,78 @@ class PlayerSyncController extends Controller
             'total' => $players->count()
         ]);
     }
+
+    public function incrementCoins(Request $request): JsonResponse
+    {
+        $playerId = $request->input('playerId');
+        $amount = (int)$request->input('amount', 0);
+
+        if (!$playerId || $amount <= 0) {
+            return response()->json(['success' => false, 'error' => 'INVALID_PARAMS'], 400);
+        }
+
+        $player = PlayerProfile::firstOrCreate(
+            ['player_id' => $playerId],
+            ['nickname' => 'لاعب_' . substr($playerId, -4), 'coins' => 100]
+        );
+
+        $player->increment('coins', $amount);
+
+        return response()->json([
+            'success' => true,
+            'playerId' => $playerId,
+            'coins' => $player->fresh()->coins,
+            'message' => "Coins incremented by {$amount}"
+        ]);
+    }
+
+    public function decrementCoins(Request $request): JsonResponse
+    {
+        $playerId = $request->input('playerId');
+        $amount = (int)$request->input('amount', 0);
+
+        if (!$playerId || $amount <= 0) {
+            return response()->json(['success' => false, 'error' => 'INVALID_PARAMS'], 400);
+        }
+
+        $player = PlayerProfile::where('player_id', $playerId)->first();
+        if (!$player || $player->coins < $amount) {
+            return response()->json(['success' => false, 'error' => 'INSUFFICIENT_COINS'], 400);
+        }
+
+        $player->decrement('coins', $amount);
+
+        return response()->json([
+            'success' => true,
+            'playerId' => $playerId,
+            'coins' => $player->fresh()->coins,
+            'message' => "Coins decremented by {$amount}"
+        ]);
+    }
+
+    public function logMatch(Request $request): JsonResponse
+    {
+        $match = \App\Models\MatchLog::create([
+            'room_code' => $request->input('roomCode', 'CUSTOM'),
+            'winning_faction' => $request->input('winnerTeam', $request->input('winningFaction', 'KINGDOM')),
+            'victory_rule' => $request->input('victoryRule', 'standard'),
+            'player_count' => (int)$request->input('playerCount', 0),
+            'duration_seconds' => (int)$request->input('durationSeconds', 0),
+            'rounds_played' => (int)$request->input('roundsPlayed', 1),
+            'players_summary' => $request->input('rolesUsed', []),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'matchId' => $match->match_id,
+        ]);
+    }
+
+    public function getAnnouncement(): JsonResponse
+    {
+        $announcement = \Illuminate\Support\Facades\Cache::get('latest_system_broadcast');
+        return response()->json([
+            'announcement' => $announcement
+        ]);
+    }
 }

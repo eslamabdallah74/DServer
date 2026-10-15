@@ -44,21 +44,19 @@
       <table>
         <thead>
           <tr>
-            <th>اللاعب</th>
+            <th>#</th>
+            <th>معرف اللاعب</th>
             <th>التقييم</th>
-            <th>الفئة</th>
             <th>التعليق / الملاحظة</th>
-            <th>طراز الجهاز</th>
-            <th>إصدار اللعبة</th>
             <th>التاريخ</th>
           </tr>
         </thead>
         <tbody>
           @foreach($feedbacks as $fb)
             <tr>
+              <td>#{{ $fb->feedback_id }}</td>
               <td>
-                <div style="font-weight: 800; color: #fff;">{{ $fb->nickname ?: 'مجهول' }}</div>
-                <div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">{{ $fb->player_id }}</div>
+                <span style="font-family: monospace; color: var(--gold); font-weight: 700;">{{ $fb->player_id ?: 'مجهول' }}</span>
               </td>
               <td>
                 <div style="color: #fbbf24; font-size: 13px;">
@@ -72,14 +70,9 @@
                   <span style="margin-right: 4px; font-weight: 700; color: #fff;">({{ $fb->rating }})</span>
                 </div>
               </td>
-              <td>
-                <span class="badge badge-gold">{{ $fb->category ?: 'عام' }}</span>
+              <td style="max-width: 440px; line-height: 1.5; font-size: 13px;">
+                {{ $fb->content ?: ($fb->comment ?: 'بدون تعليق مكتوب') }}
               </td>
-              <td style="max-width: 360px; line-height: 1.5; font-size: 13px;">
-                {{ $fb->comment ?: 'بدون تعليق مكتوب' }}
-              </td>
-              <td style="font-size: 12px; color: var(--text-muted);">{{ $fb->device_model ?: 'غير محدد' }}</td>
-              <td><code style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">{{ $fb->app_version ?: '1.0.0' }}</code></td>
               <td style="font-size: 12px; color: var(--text-muted);">{{ $fb->created_at ? $fb->created_at->format('Y/m/d H:i') : '-' }}</td>
             </tr>
           @endforeach

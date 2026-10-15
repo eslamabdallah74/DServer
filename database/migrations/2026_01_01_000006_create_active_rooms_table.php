@@ -21,3 +21,4 @@ return new class extends Migration
         Schema::dropIfExists('active_rooms');
     }
 };
+

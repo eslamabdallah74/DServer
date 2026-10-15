@@ -53,4 +53,13 @@ class IssueController extends Controller
             'feedbackId' => $feedback->feedback_id,
         ]);
     }
+
+    public function getIssues(): JsonResponse
+    {
+        $issues = AppIssue::orderBy('created_at', 'desc')->take(50)->get();
+        return response()->json([
+            'success' => true,
+            'data' => $issues,
+        ]);
+    }
 }

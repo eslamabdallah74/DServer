@@ -225,6 +225,7 @@ class AdminDashboardController extends Controller
         ];
 
         // Trigger on global channel and all active room channels
+        \Illuminate\Support\Facades\Cache::put('latest_system_broadcast', $payload, now()->addHours(24));
         PusherService::broadcastGlobal('s_system_broadcast', $payload);
         foreach (RoomManager::getAllActiveRooms() as $r) {
             if (!empty($r['roomCode'])) {

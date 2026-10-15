@@ -74,3 +74,4 @@ class GameTickCommand extends Command
         }
     }
 }
+

@@ -97,3 +97,4 @@ class NightResolverTest extends TestCase
         $this->assertFalse($room['players'][3]['isAlive']);
     }
 }
+

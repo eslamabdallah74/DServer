@@ -17,11 +17,11 @@
       <a href="{{ route('admin.issues', ['severity' => 'high']) }}" class="btn {{ request('severity') == 'high' ? 'btn-gold' : 'btn-outline' }}">
         <i class="fa-solid fa-circle-exclamation"></i> عالي (High)
       </a>
-      <a href="{{ route('admin.issues', ['severity' => 'medium']) }}" class="btn {{ request('severity') == 'medium' ? 'btn-blue' : 'btn-outline' }}">
-        متوسط (Medium)
+      <a href="{{ route('admin.issues', ['severity' => 'error']) }}" class="btn {{ request('severity') == 'error' ? 'btn-blue' : 'btn-outline' }}">
+        خطأ (Error)
       </a>
-      <a href="{{ route('admin.issues', ['severity' => 'low']) }}" class="btn {{ request('severity') == 'low' ? 'btn-outline' : 'btn-outline' }}">
-        منخفض (Low)
+      <a href="{{ route('admin.issues', ['severity' => 'warning']) }}" class="btn {{ request('severity') == 'warning' ? 'btn-outline' : 'btn-outline' }}">
+        تحذير (Warning)
       </a>
     </div>
     <span style="font-size: 13px; color: var(--text-muted);">إجمالي البلاغات: {{ $issues->total() }}</span>
@@ -45,10 +45,8 @@
           <tr>
             <th>#</th>
             <th>الخطورة</th>
-            <th>النوع</th>
-            <th>الوصف / الخطأ</th>
-            <th>إصدار التطبيق</th>
-            <th>معرف اللاعب</th>
+            <th>الصفحة / المشهد</th>
+            <th>رسالة الخطأ</th>
             <th>التاريخ والوقت</th>
             <th>التفاصيل</th>
           </tr>
@@ -56,24 +54,22 @@
         <tbody>
           @foreach($issues as $issue)
             <tr>
-              <td>#{{ $issue->id }}</td>
+              <td>#{{ $issue->issue_id }}</td>
               <td>
                 @if($issue->severity === 'critical')
                   <span class="badge badge-red"><i class="fa-solid fa-fire"></i> حرج</span>
                 @elseif($issue->severity === 'high')
                   <span class="badge badge-gold"><i class="fa-solid fa-triangle-exclamation"></i> عالي</span>
-                @elseif($issue->severity === 'medium')
-                  <span class="badge badge-blue">متوسط</span>
+                @elseif($issue->severity === 'error')
+                  <span class="badge badge-red">خطأ</span>
                 @else
-                  <span class="badge badge-outline">منخفض</span>
+                  <span class="badge badge-outline">{{ $issue->severity }}</span>
                 @endif
               </td>
-              <td style="font-weight: 700;">{{ $issue->issue_type }}</td>
-              <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ $issue->description }}">
-                {{ $issue->description }}
+              <td><code style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">{{ $issue->page ?: 'عام' }}</code></td>
+              <td style="max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ $issue->message }}">
+                {{ $issue->message }}
               </td>
-              <td><code style="background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">{{ $issue->app_version ?: 'N/A' }}</code></td>
-              <td><span style="font-family: monospace; color: var(--text-muted);">{{ $issue->player_id ?: 'غير مسجل' }}</span></td>
               <td style="font-size: 12px; color: var(--text-muted);">{{ $issue->created_at ? $issue->created_at->format('Y/m/d H:i') : '-' }}</td>
               <td>
                 <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;" onclick='viewIssueDetails(@json($issue))'>
@@ -99,7 +95,7 @@
       <button type="button" onclick="closeIssueModal()" style="background: none; border: none; color: #999; font-size: 20px; cursor: pointer;">&times;</button>
     </div>
     <div style="margin-bottom: 16px;">
-      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">الوصف:</div>
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">الرسالة:</div>
       <div id="issueModalDesc" style="background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; font-size: 13px; line-height: 1.6; word-break: break-word;"></div>
     </div>
     <div style="margin-bottom: 16px;">
@@ -120,8 +116,8 @@
 @section('scripts')
 <script>
   function viewIssueDetails(issue) {
-    document.getElementById('issueModalTitle').innerText = 'تفاصيل بلاغ #' + issue.id + ' (' + issue.issue_type + ')';
-    document.getElementById('issueModalDesc').innerText = issue.description || 'لا يوجد وصف إضافي.';
+    document.getElementById('issueModalTitle').innerText = 'تفاصيل بلاغ #' + (issue.issue_id || issue.id) + ' (' + (issue.severity || '') + ')';
+    document.getElementById('issueModalDesc').innerText = issue.message || issue.description || 'لا يوجد وصف إضافي.';
     document.getElementById('issueModalDevice').innerText = typeof issue.device_info === 'object' ? JSON.stringify(issue.device_info, null, 2) : (issue.device_info || 'N/A');
     document.getElementById('issueModalStack').innerText = issue.stack_trace || 'لا يتوفر Stack Trace.';
     document.getElementById('issueModal').classList.add('active');
