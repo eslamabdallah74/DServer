@@ -14,10 +14,12 @@ class StatusController extends Controller
     public function getStatus(): JsonResponse
     {
         $dbConnected = true;
+        $dbError = null;
         try {
             DB::connection()->getPdo();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $dbConnected = false;
+            $dbError = $e->getMessage();
         }
 
         $totalPlayers = $dbConnected ? PlayerProfile::count() : 0;

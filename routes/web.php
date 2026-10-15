@@ -8,6 +8,10 @@ Route::get('/', function () {
     return redirect()->route('admin.dashboard');
 });
 
+// Root Health Check endpoint
+Route::get('/health', [\App\Http\Controllers\Api\StatusController::class, 'getStatus']);
+Route::get('/server/health', [\App\Http\Controllers\Api\StatusController::class, 'getStatus']);
+
 // App Links & AdMob verification static endpoints
 Route::get('/.well-known/assetlinks.json', function () {
     return response()->json([
