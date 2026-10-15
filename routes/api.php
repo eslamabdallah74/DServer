@@ -25,7 +25,7 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 
 // Multiplayer Online Room Endpoints (Accessible by mobile app & web clients)
 Route::prefix('rooms')->group(function () {
-    Route::post('/create', [RoomApiController::class, 'create']);
+    Route::post('/create', [RoomApiController::class, 'create'])->middleware('throttle:20,1');
     Route::post('/join', [RoomApiController::class, 'join']);
 
     Route::post('/{roomCode}/start', [RoomApiController::class, 'start']);

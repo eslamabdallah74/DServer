@@ -163,5 +163,19 @@ class RoomApiTest extends TestCase
         // Room should no longer exist
         $this->assertNull(RoomManager::getRoom($roomCode));
     }
+
+    public function test_create_room_is_rate_limited_after_threshold(): void
+    {
+        // 20 requests within rate limit succeed
+        for ($i = 0; $i < 20; $i++) {
+            $res = $this->postJson('/api/rooms/create', ['nickname' => "لاعب_{$i}"]);
+            $this->assertContains($res->status(), [201, 200]);
+        }
+
+        // 21st request exceeds rate limit (429 Too Many Requests)
+        $rateLimitedRes = $this->postJson('/api/rooms/create', ['nickname' => 'لاعب_زائد']);
+        $rateLimitedRes->assertStatus(429);
+    }
 }
+
 

@@ -340,7 +340,7 @@
       const channelsApi = data.channelsApi;
 
       // Update counters
-      document.getElementById('msgsTodayVal').innerHTML = 
+      document.getElementById('msgsTodayVal').innerHTML =
         `${Number(stats.today.messages).toLocaleString()} <span style="font-size: 14px; font-weight: 600; color: var(--text-muted);">/ ${Number(stats.config.daily_limit).toLocaleString()}</span>`;
       document.getElementById('quotaBadge').innerText = `${stats.today.quota_percentage}%`;
       document.getElementById('remainingVal').innerText = Number(stats.today.remaining).toLocaleString();
@@ -351,7 +351,7 @@
       document.getElementById('successRateVal').innerText = `${stats.totals.success_rate}%`;
       document.getElementById('errorsTotalVal').innerText = `${stats.totals.errors} فشل`;
       document.getElementById('activeRoomsCountVal').innerText = `${stats.active_rooms_count} غرفة`;
-      
+
       if (channelsApi && channelsApi.channels) {
         document.getElementById('occupiedChannelsCount').innerText = Object.keys(channelsApi.channels).length;
       }
@@ -365,8 +365,8 @@
         let html = '';
         stats.recent_transmissions.forEach(tx => {
           const statusClass = (tx.status_code >= 200 && tx.status_code < 300) ? 'badge-green' : 'badge-red';
-          const successBadge = tx.success 
-            ? '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> نجاح</span>' 
+          const successBadge = tx.success
+            ? '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> نجاح</span>'
             : '<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> فشل</span>';
 
           html += `
@@ -403,7 +403,7 @@
       });
       const data = await res.json();
       document.getElementById('pingVal').innerText = data.latency_ms || 0;
-      
+
       const badge = document.getElementById('liveConnectionBadge');
       const text = document.getElementById('liveConnectionText');
       if (data.success) {
@@ -492,7 +492,7 @@
             <span class="badge ${data.details.occupied ? 'badge-green' : 'badge-gold'}">${data.details.occupied ? 'قناة مشغولة (Occupied)' : 'فارغة'}</span>
           </div>
           <div style="font-size: 11px; color: var(--text-muted);">
-            المشتركين: <strong>${data.details.subscription_count ?? (data.details.occupied ? 'نشط' : '0')}</strong> | 
+            المشتركين: <strong>${data.details.subscription_count ?? (data.details.occupied ? 'نشط' : '0')}</strong> |
             المستخدمين: <strong>${data.details.user_count ?? '0'}</strong>
           </div>
         `;

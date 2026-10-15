@@ -438,91 +438,105 @@ class RoomManager
     }
 
     /**
-     * Submit a night action.
+     * Submit a night action with atomic concurrency locking.
      */
     public static function submitNightAction(string $roomCode, string $playerId, string $targetPlayerId, array $targetPlayerIds = []): array
     {
         $code = strtoupper(trim($roomCode));
-        $room = self::getRoom($code);
+        try {
+            $lock = Cache::lock("room_lock_{$code}", 5);
+            return $lock->block(2, function () use ($code, $playerId, $targetPlayerId, $targetPlayerIds) {
+                $room = self::getRoom($code);
 
-        if (!$room) return ['error' => 'ROOM_NOT_FOUND'];
+                if (!$room) return ['error' => 'ROOM_NOT_FOUND'];
 
-        $player = null;
-        foreach ($room['players'] as &$p) {
-            if ($p['playerId'] === $playerId) {
-                $player = &$p;
-                break;
-            }
+                $player = null;
+                foreach ($room['players'] as &$p) {
+                    if ($p['playerId'] === $playerId) {
+                        $player = &$p;
+                        break;
+                    }
+                }
+
+                if (!$player || !($player['isAlive'] ?? true)) {
+                    return ['error' => 'INVALID_PLAYER'];
+                }
+
+                $ids = !empty($targetPlayerIds) ? $targetPlayerIds : (!empty($targetPlayerId) ? [$targetPlayerId] : []);
+
+                $room['nightActions'][$playerId] = [
+                    'actorPlayerId'   => $playerId,
+                    'roleId'          => $player['role'] ?? '',
+                    'targetPlayerId'  => $ids[0] ?? '',
+                    'targetPlayerIds' => $ids,
+                    'submittedAt'     => (int)(microtime(true) * 1000),
+                ];
+
+                $player['isReady'] = true;
+                self::saveRoom($room);
+                self::broadcastSnapshot($room);
+                self::checkAllReady($room);
+
+                return ['success' => true];
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            return ['error' => 'CONCURRENCY_LOCK_TIMEOUT'];
         }
-
-        if (!$player || !($player['isAlive'] ?? true)) {
-            return ['error' => 'INVALID_PLAYER'];
-        }
-
-        $ids = !empty($targetPlayerIds) ? $targetPlayerIds : (!empty($targetPlayerId) ? [$targetPlayerId] : []);
-
-        $room['nightActions'][$playerId] = [
-            'actorPlayerId'   => $playerId,
-            'roleId'          => $player['role'] ?? '',
-            'targetPlayerId'  => $ids[0] ?? '',
-            'targetPlayerIds' => $ids,
-            'submittedAt'     => (int)(microtime(true) * 1000),
-        ];
-
-        $player['isReady'] = true;
-        self::saveRoom($room);
-        self::broadcastSnapshot($room);
-        self::checkAllReady($room);
-
-        return ['success' => true];
     }
 
     /**
-     * Cast vote during VOTING phase.
+     * Cast vote during VOTING phase with atomic concurrency locking.
      */
     public static function castVote(string $roomCode, string $playerId, ?string $targetPlayerId): array
     {
         $code = strtoupper(trim($roomCode));
-        $room = self::getRoom($code);
+        try {
+            $lock = Cache::lock("room_lock_{$code}", 5);
+            return $lock->block(2, function () use ($code, $playerId, $targetPlayerId) {
+                $room = self::getRoom($code);
 
-        if (!$room) return ['error' => 'ROOM_NOT_FOUND'];
+                if (!$room) return ['error' => 'ROOM_NOT_FOUND'];
 
-        $player = null;
-        foreach ($room['players'] as &$p) {
-            if ($p['playerId'] === $playerId) {
-                $player = &$p;
-                break;
-            }
+                $player = null;
+                foreach ($room['players'] as &$p) {
+                    if ($p['playerId'] === $playerId) {
+                        $player = &$p;
+                        break;
+                    }
+                }
+
+                if (!$player || !($player['isAlive'] ?? true)) {
+                    return ['error' => 'INVALID_PLAYER'];
+                }
+
+                if ($targetPlayerId) {
+                    $room['votes'][$playerId] = $targetPlayerId;
+                } else {
+                    unset($room['votes'][$playerId]);
+                }
+
+                // Tally votes
+                $voteTally = [];
+                foreach ($room['votes'] as $voter => $target) {
+                    $voteTally[$target] = ($voteTally[$target] ?? 0) + 1;
+                }
+
+                $totalLiving = count(array_filter($room['players'], fn($p) => $p['isAlive'] ?? true));
+                PusherService::broadcastToRoom($code, 's_vote_update', [
+                    'voteTally' => $voteTally,
+                    'totalVoters' => $totalLiving,
+                ]);
+
+                $player['isReady'] = true;
+                self::saveRoom($room);
+                self::broadcastSnapshot($room);
+                self::checkAllReady($room);
+
+                return ['success' => true];
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            return ['error' => 'CONCURRENCY_LOCK_TIMEOUT'];
         }
-
-        if (!$player || !($player['isAlive'] ?? true)) {
-            return ['error' => 'INVALID_PLAYER'];
-        }
-
-        if ($targetPlayerId) {
-            $room['votes'][$playerId] = $targetPlayerId;
-        } else {
-            unset($room['votes'][$playerId]);
-        }
-
-        // Tally votes
-        $voteTally = [];
-        foreach ($room['votes'] as $voter => $target) {
-            $voteTally[$target] = ($voteTally[$target] ?? 0) + 1;
-        }
-
-        $totalLiving = count(array_filter($room['players'], fn($p) => $p['isAlive'] ?? true));
-        PusherService::broadcastToRoom($code, 's_vote_update', [
-            'voteTally' => $voteTally,
-            'totalVoters' => $totalLiving,
-        ]);
-
-        $player['isReady'] = true;
-        self::saveRoom($room);
-        self::broadcastSnapshot($room);
-        self::checkAllReady($room);
-
-        return ['success' => true];
     }
 
     /**
@@ -992,6 +1006,11 @@ class RoomManager
 
         unset(self::$inMemoryRooms[$code]);
         Cache::forget("deceit_room_{$code}");
+        try {
+            Cache::lock("room_lock_{$code}")->forceRelease();
+        } catch (\Throwable $e) {
+            // Ignore
+        }
 
         try {
             DB::table('active_rooms')->where('room_code', $code)->delete();
