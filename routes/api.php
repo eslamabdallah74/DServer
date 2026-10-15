@@ -46,8 +46,19 @@ Route::prefix('rooms')->group(function () {
 
 // General & Public API Endpoints
 Route::get('/announcement', [PlayerSyncController::class, 'getAnnouncement']);
+Route::get('/config', function () {
+    return response()->json([
+        'success' => true,
+        'config' => \App\Services\GameEngine\GameConfigService::getAll(),
+    ]);
+});
 
-// Player profile sync, Issues & Feedback Endpoints (with fallback / JWT authentication)
+// Direct In-Game Submissions (Error Logging & Player Feedback)
+Route::post('/issues', [IssueController::class, 'logIssue']);
+Route::post('/feedback', [IssueController::class, 'submitFeedback']);
+Route::post('/matches/log', [PlayerSyncController::class, 'logMatch']);
+
+// Player profile sync & Protected Admin Operations (with JWT secret authentication)
 Route::middleware([ValidateJwtSecret::class])->group(function () {
     Route::post('/sync/player', [PlayerSyncController::class, 'sync']);
     Route::get('/sync/player/{id}', [PlayerSyncController::class, 'getPlayer']);
@@ -58,12 +69,9 @@ Route::middleware([ValidateJwtSecret::class])->group(function () {
 
     Route::post('/coins/increment', [PlayerSyncController::class, 'incrementCoins']);
     Route::post('/coins/decrement', [PlayerSyncController::class, 'decrementCoins']);
-    Route::post('/matches/log', [PlayerSyncController::class, 'logMatch']);
 
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
-    Route::post('/issues', [IssueController::class, 'logIssue']);
     Route::get('/issues', [IssueController::class, 'getIssues']);
-    Route::post('/feedback', [IssueController::class, 'submitFeedback']);
 });
