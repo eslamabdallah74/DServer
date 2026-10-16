@@ -39,6 +39,7 @@ Route::prefix('rooms')->group(function () {
     Route::post('/{roomCode}/leave', [RoomApiController::class, 'leave']);
     Route::post('/{roomCode}/settings', [RoomApiController::class, 'settings']);
     Route::post('/{roomCode}/veto', [RoomApiController::class, 'veto']);
+    Route::post('/{roomCode}/reconnect', [RoomApiController::class, 'reconnect']);
 
     Route::get('/{roomCode}', [RoomApiController::class, 'show']);
     Route::get('/{roomCode}/sync', [RoomApiController::class, 'sync']);

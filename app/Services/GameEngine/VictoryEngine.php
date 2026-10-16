@@ -59,50 +59,59 @@ class VictoryEngine
             $room['vacantThrone'] = true;
         }
 
+        // Helper to attach living survivor winners
+        $attachSurvivors = function (array $outcome) use ($players) {
+            $survivors = array_values(array_filter($players, fn($p) => ($p['isAlive'] ?? true) && ($p['role'] ?? '') === 'survivor'));
+            if (!empty($survivors)) {
+                $outcome['survivorWinnerIds'] = array_column($survivors, 'playerId');
+            }
+            return $outcome;
+        };
+
         // ── Tier 2: Vacant Throne — Shadow Auto-Win ───────────────────────────────
         $kingMustSurvive = $room['settings']['kingMustSurvive'] ?? true;
         if ($kingMustSurvive && ($room['vacantThrone'] ?? false) === true) {
-            return [
+            return $attachSurvivors([
                 'isDecided' => true,
                 'kind' => 'FACTION',
                 'faction' => 'SHADOW',
                 'ruleId' => 'king_must_survive',
                 'reason' => 'سقط الملك وخلا العرش من وريث شرعي — انتصرت قوى الظلام!',
-            ];
+            ]);
         }
 
         // ── Tier 3: Kingdom Wins — All Shadows Dead ───────────────────────────────
         if (count($livingShadows) === 0) {
-            return [
+            return $attachSurvivors([
                 'isDecided' => true,
                 'kind' => 'FACTION',
                 'faction' => 'KINGDOM',
                 'ruleId' => 'shadows_eliminated',
                 'reason' => 'تم القضاء على جميع الظلال — نصرت المملكة!',
-            ];
+            ]);
         }
 
         // ── Tier 3b: Kingdom Wins — 100% Tasks Completed ─────────────────────────
         $taskProgress = $room['taskProgress'] ?? 0;
         if ($taskProgress >= 1.0) {
-            return [
+            return $attachSurvivors([
                 'isDecided' => true,
                 'kind' => 'FACTION',
                 'faction' => 'KINGDOM',
                 'ruleId' => 'tasks_completed',
                 'reason' => 'أنجزت المملكة 100٪ من مهامها — النصر للمملكة!',
-            ];
+            ]);
         }
 
         // ── Tier 4: Shadow Wins — Outnumber Kingdom ───────────────────────────────
         if (count($livingShadows) > count($livingKingdom)) {
-            return [
+            return $attachSurvivors([
                 'isDecided' => true,
                 'kind' => 'FACTION',
                 'faction' => 'SHADOW',
                 'ruleId' => 'shadows_outnumber',
                 'reason' => 'تفوق عدد الظلال على المملكة — النصر للظلام!',
-            ];
+            ]);
         }
 
         // ── Tier 4b: Shadow Wins — Parity with no protection ────────────────────
@@ -116,13 +125,13 @@ class VictoryEngine
                 }
             }
             if (!$hasProtector) {
-                return [
+                return $attachSurvivors([
                     'isDecided' => true,
                     'kind' => 'FACTION',
                     'faction' => 'SHADOW',
                     'ruleId' => 'shadows_break_parity',
                     'reason' => 'تعادل فريق الظلال مع المملكة وانعدمت الحماية — انتصر الظلام!',
-                ];
+                ]);
             }
         }
 

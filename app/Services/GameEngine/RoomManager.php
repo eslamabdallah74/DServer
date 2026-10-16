@@ -317,31 +317,70 @@ class RoomManager
         if ($playerIndex === -1) return ['error' => 'PLAYER_NOT_FOUND'];
 
         $leavingPlayer = $room['players'][$playerIndex];
-        array_splice($room['players'], $playerIndex, 1);
 
-        // Reassign host if host left
-        if (($leavingPlayer['isHost'] ?? false) && count($room['players']) > 0) {
-            $nextHuman = null;
-            foreach ($room['players'] as &$p) {
-                if (!($p['isBot'] ?? false)) {
-                    $nextHuman = &$p;
-                    break;
+        if (($room['phase'] ?? 'LOBBY') !== 'LOBBY') {
+            // If in-game, mark player dead and disconnected so game balance and turns continue properly
+            $room['players'][$playerIndex]['isAlive'] = false;
+            $room['players'][$playerIndex]['isConnected'] = false;
+
+            // Reassign host if leaving player was host
+            if ($leavingPlayer['isHost'] ?? false) {
+                $room['players'][$playerIndex]['isHost'] = false;
+                foreach ($room['players'] as &$p) {
+                    if (!($p['isBot'] ?? false) && ($p['isAlive'] ?? false)) {
+                        $p['isHost'] = true;
+                        $room['hostPlayerId'] = $p['playerId'];
+                        break;
+                    }
                 }
             }
-            if ($nextHuman) {
-                $nextHuman['isHost'] = true;
-                $room['hostPlayerId'] = $nextHuman['playerId'];
-            }
-        }
 
-        // Check if any human players remain
-        $humanCount = count(array_filter($room['players'], fn($p) => !($p['isBot'] ?? false)));
-        if ($humanCount === 0) {
-            self::deleteRoom($code);
-            PusherService::broadcastToRoom($code, 's_room_destroyed', [
-                'reason' => 'No human players remaining.'
-            ]);
-            return ['roomDestroyed' => true];
+            // Check if any connected human players remain
+            $humanCount = count(array_filter($room['players'], fn($p) => !($p['isBot'] ?? false) && ($p['isConnected'] ?? true)));
+            if ($humanCount === 0) {
+                self::deleteRoom($code);
+                PusherService::broadcastToRoom($code, 's_room_destroyed', [
+                    'reason' => 'No human players remaining.'
+                ]);
+                return ['roomDestroyed' => true];
+            }
+
+            // Check victory condition in case leaver altered win condition
+            $victory = VictoryEngine::evaluateVictory($room);
+            if ($victory['isDecided'] ?? false) {
+                self::finishGame($room, $victory);
+                return ['room' => $room, 'roomDestroyed' => false];
+            }
+
+            // Check if all remaining living players are ready
+            self::checkAllReady($room);
+        } else {
+            array_splice($room['players'], $playerIndex, 1);
+
+            // Reassign host if host left
+            if (($leavingPlayer['isHost'] ?? false) && count($room['players']) > 0) {
+                $nextHuman = null;
+                foreach ($room['players'] as &$p) {
+                    if (!($p['isBot'] ?? false)) {
+                        $nextHuman = &$p;
+                        break;
+                    }
+                }
+                if ($nextHuman) {
+                    $nextHuman['isHost'] = true;
+                    $room['hostPlayerId'] = $nextHuman['playerId'];
+                }
+            }
+
+            // Check if any human players remain
+            $humanCount = count(array_filter($room['players'], fn($p) => !($p['isBot'] ?? false)));
+            if ($humanCount === 0) {
+                self::deleteRoom($code);
+                PusherService::broadcastToRoom($code, 's_room_destroyed', [
+                    'reason' => 'No human players remaining.'
+                ]);
+                return ['roomDestroyed' => true];
+            }
         }
 
         $room['lastActivityAt'] = (int)(microtime(true) * 1000);
@@ -349,6 +388,46 @@ class RoomManager
         self::broadcastSnapshot($room);
 
         return ['room' => $room, 'roomDestroyed' => false];
+    }
+
+    /**
+     * Reconnect player to an existing room using reconnectToken.
+     */
+    public static function reconnectPlayer(string $roomCode, string $reconnectToken): array
+    {
+        $code = strtoupper(trim($roomCode));
+        $room = self::getRoom($code);
+
+        if (!$room) return ['error' => 'ROOM_NOT_FOUND', 'message' => 'الغرفة غير موجودة أو انتهت صلاحيتها.'];
+
+        $tokenHash = hash('sha256', $reconnectToken);
+        $foundIndex = -1;
+
+        foreach ($room['players'] as $idx => $p) {
+            if (($p['reconnectTokenHash'] ?? '') === $tokenHash) {
+                $foundIndex = $idx;
+                break;
+            }
+        }
+
+        if ($foundIndex === -1) {
+            return ['error' => 'INVALID_TOKEN', 'message' => 'رمز إعادة الاتصال غير صالح.'];
+        }
+
+        $room['players'][$foundIndex]['isConnected'] = true;
+        $room['lastActivityAt'] = (int)(microtime(true) * 1000);
+
+        self::saveRoom($room);
+        self::broadcastSnapshot($room);
+
+        return [
+            'success' => true,
+            'roomCode' => $code,
+            'playerId' => $room['players'][$foundIndex]['playerId'],
+            'player' => $room['players'][$foundIndex],
+            'reconnectToken' => $reconnectToken,
+            'room' => self::sanitizeRoomForJson($room),
+        ];
     }
 
     /**
@@ -448,29 +527,104 @@ class RoomManager
             return $lock->block(2, function () use ($code, $playerId, $targetPlayerId, $targetPlayerIds) {
                 $room = self::getRoom($code);
 
-                if (!$room) return ['error' => 'ROOM_NOT_FOUND'];
+                if (!$room) return ['error' => 'ROOM_NOT_FOUND', 'message' => 'الغرفة غير موجودة.'];
+
+                // 1. Phase validation
+                if (($room['phase'] ?? '') !== 'NIGHT') {
+                    return ['error' => 'INVALID_PHASE', 'message' => 'لا يمكن تقديم الإجراءات إلا في طور الليل.'];
+                }
 
                 $player = null;
+                $playerMap = [];
                 foreach ($room['players'] as &$p) {
+                    $playerMap[$p['playerId']] = $p;
                     if ($p['playerId'] === $playerId) {
                         $player = &$p;
-                        break;
                     }
                 }
 
+                // 2. Player validation
                 if (!$player || !($player['isAlive'] ?? true)) {
-                    return ['error' => 'INVALID_PLAYER'];
+                    return ['error' => 'INVALID_PLAYER', 'message' => 'اللاعب غير صالح أو مستبعد.'];
+                }
+
+                $roleId = $player['role'] ?? '';
+
+                // 3. Role capability validation
+                if (!RoleData::hasNightAction($roleId)) {
+                    return ['error' => 'ROLE_HAS_NO_ACTION', 'message' => 'شخصيتك لا تملك قدرة ليلية نشطة.'];
                 }
 
                 $ids = !empty($targetPlayerIds) ? $targetPlayerIds : (!empty($targetPlayerId) ? [$targetPlayerId] : []);
+                $requiredTargets = RoleData::getRequiredTargets($roleId);
 
+                // 4. Target count validation
+                if (count($ids) < $requiredTargets) {
+                    return [
+                        'error' => 'INSUFFICIENT_TARGETS',
+                        'message' => "يجب تحديد {$requiredTargets} أهداف لاستخدام هذه القدرة."
+                    ];
+                }
+
+                // 5. Target existence and alive validation
+                foreach ($ids as $tid) {
+                    if (!isset($playerMap[$tid])) {
+                        return ['error' => 'TARGET_NOT_FOUND', 'message' => 'أحد الأهداف المحددة غير موجود في الغرفة.'];
+                    }
+                    if (!($playerMap[$tid]['isAlive'] ?? true)) {
+                        return ['error' => 'TARGET_NOT_ALIVE', 'message' => 'لا يمكن استهداف لاعب مستبعد.'];
+                    }
+                }
+
+                // 6. Self-targeting validation
+                if (in_array($playerId, $ids, true) && !RoleData::canTargetSelf($roleId)) {
+                    return ['error' => 'CANNOT_TARGET_SELF', 'message' => 'لا يمكنك استهداف نفسك بهذه القدرة.'];
+                }
+
+                // 7. Ally-targeting validation (for Shadow faction)
+                $actorFaction = $player['faction'] ?? RoleData::getFaction($roleId);
+                if ($actorFaction === 'shadow' && !RoleData::canTargetAllies($roleId)) {
+                    foreach ($ids as $tid) {
+                        $targetFaction = $playerMap[$tid]['faction'] ?? RoleData::getFaction($playerMap[$tid]['role'] ?? '');
+                        if ($targetFaction === 'shadow') {
+                            return ['error' => 'CANNOT_TARGET_ALLY', 'message' => 'لا يمكنك استهداف أحد رفاقك في الظلال.'];
+                        }
+                    }
+                }
+
+                // 8. Saboteur check: target must have an active night action
+                if ($roleId === 'saboteur') {
+                    $targetRole = $playerMap[$ids[0]]['role'] ?? '';
+                    if (!RoleData::hasNightAction($targetRole)) {
+                        return ['error' => 'TARGET_HAS_NO_ACTION', 'message' => 'الهدف المختار لا يملك قدرة ليلية نشطة لتعطيلها.'];
+                    }
+                }
+
+                // 9. Repeat target validation (noRepeatTarget)
+                if (RoleData::noRepeatTarget($roleId)) {
+                    $prevTargets = $room['lastNightTargets'][$playerId] ?? [];
+                    if (!empty(array_intersect($ids, $prevTargets))) {
+                        return ['error' => 'CANNOT_REPEAT_TARGET', 'message' => 'لا يمكنك استهداف نفس اللاعب ليلتين متتاليتين.'];
+                    }
+                }
+
+                // 10. Record night action
                 $room['nightActions'][$playerId] = [
                     'actorPlayerId'   => $playerId,
-                    'roleId'          => $player['role'] ?? '',
+                    'roleId'          => $roleId,
                     'targetPlayerId'  => $ids[0] ?? '',
                     'targetPlayerIds' => $ids,
                     'submittedAt'     => (int)(microtime(true) * 1000),
                 ];
+
+                // 11. If Shadow Leader, update recommendation and broadcast live to Shadow faction
+                if ($roleId === 'shadow_leader') {
+                    $room['shadowRecommendation'] = $ids[0];
+                    PusherService::broadcastToRoom($room['roomCode'], 's_shadow_recommendation', [
+                        'recommendationTargetId' => $ids[0],
+                        'recommendedNickname' => $playerMap[$ids[0]]['nickname'] ?? '',
+                    ]);
+                }
 
                 $player['isReady'] = true;
                 self::saveRoom($room);
@@ -624,12 +778,22 @@ class RoomManager
             // Night 1 begins
             $room['round'] = ($room['round'] ?? 0) + 1;
             $room['nightActions'] = [];
+            $room['dayIntel'] = [];
             self::startPhase($room, 'NIGHT', $room['settings']['nightTimerSeconds'] ?? 60);
 
         } elseif ($phase === 'NIGHT') {
+            // Save last night targets for repeat check
+            $lastTargets = [];
+            foreach ($room['nightActions'] ?? [] as $actorId => $act) {
+                $lastTargets[$actorId] = !empty($act['targetPlayerIds']) ? $act['targetPlayerIds'] : (!empty($act['targetPlayerId']) ? [$act['targetPlayerId']] : []);
+            }
+            $room['lastNightTargets'] = $lastTargets;
+
             // Resolve night actions
             $outcome = NightResolver::resolveNight($room);
             $room['lastNightOutcome'] = $outcome;
+            $room['shadowRecommendation'] = null; // Clear recommendation after night ends
+            $room['dayIntel'] = $outcome['intel'] ?? [];
             self::startPhase($room, 'MORNING', 10);
 
         } elseif ($phase === 'MORNING') {
@@ -665,6 +829,7 @@ class RoomManager
             // Next NIGHT
             $room['round'] = ($room['round'] ?? 0) + 1;
             $room['nightActions'] = [];
+            $room['dayIntel'] = [];
             self::startPhase($room, 'NIGHT', $room['settings']['nightTimerSeconds'] ?? 60);
         }
     }
@@ -675,15 +840,14 @@ class RoomManager
     public static function tallyVotesAndEliminate(array &$room): void
     {
         $voteCounts = [];
-        $players = &$room['players'];
+        $playerMap = [];
+        foreach ($room['players'] as $p) {
+            $playerMap[$p['playerId']] = $p;
+        }
 
         foreach ($room['votes'] ?? [] as $voterId => $targetId) {
-            $voter = null;
-            $target = null;
-            foreach ($players as &$p) {
-                if ($p['playerId'] === $voterId) $voter = &$p;
-                if ($p['playerId'] === $targetId) $target = &$p;
-            }
+            $voter = $playerMap[$voterId] ?? null;
+            $target = $playerMap[$targetId] ?? null;
             if ($voter && ($voter['isAlive'] ?? true) && $target && ($target['isAlive'] ?? true)) {
                 $voteCounts[$targetId] = ($voteCounts[$targetId] ?? 0) + 1;
             }
@@ -702,15 +866,44 @@ class RoomManager
 
         if (count($candidates) === 1 && $maxVotes > 0) {
             $eliminated = null;
-            foreach ($players as &$p) {
+            foreach ($room['players'] as $idx => $p) {
                 if ($p['playerId'] === $candidates[0]) {
-                    $p['isAlive'] = false;
-                    $eliminated = $p;
+                    $room['players'][$idx]['isAlive'] = false;
+                    $eliminated = $room['players'][$idx];
                     break;
                 }
             }
             $room['lastEliminatedPlayer'] = $eliminated;
             $room['lastEliminatedCause'] = 'VOTE';
+
+            // Daytime Crown Prince succession check
+            if (($eliminated['role'] ?? '') === 'king') {
+                $crownPrinceId = null;
+                foreach ($room['players'] as $idx => $p) {
+                    if (($p['role'] ?? '') === 'crown_prince' && ($p['isAlive'] ?? true)) {
+                        $room['players'][$idx]['role'] = 'king';
+                        $crownPrinceId = $p['playerId'];
+                        break;
+                    }
+                }
+                if ($crownPrinceId) {
+                    $room['vacantThrone'] = false;
+                    if (!isset($room['dayIntel']) || !is_array($room['dayIntel'])) {
+                        $room['dayIntel'] = [];
+                    }
+                    $room['dayIntel'][$crownPrinceId] = [
+                        'type' => 'CROWN_PRINCE_SUCCESSION',
+                        'playerId' => $crownPrinceId,
+                        'text' => 'استشهد الملك في التصويت! لقد توليت منصب العرش لحماية المملكة.',
+                    ];
+                    PusherService::broadcastToRoom($room['roomCode'], 's_crown_prince_succession', [
+                        'newKingPlayerId' => $crownPrinceId,
+                        'message' => 'استشهد الملك في التصويت النهاري! تولى ولي العهد منصب العرش لحماية المملكة.'
+                    ]);
+                } else {
+                    $room['vacantThrone'] = true;
+                }
+            }
         } else {
             $room['lastEliminatedPlayer'] = null;
             $room['lastEliminatedCause'] = 'TIE';
@@ -722,6 +915,97 @@ class RoomManager
         }
 
         self::startPhase($room, 'ELIMINATION', 8);
+    }
+
+    /**
+     * Executes Judge's Veto ability to cancel voting elimination.
+     */
+    public static function applyVeto(string $roomCode, string $playerId): array
+    {
+        $code = strtoupper(trim($roomCode));
+        try {
+            $lock = Cache::lock("room_lock_{$code}", 5);
+            return $lock->block(2, function () use ($code, $playerId) {
+                $room = self::getRoom($code);
+                if (!$room) return ['error' => 'ROOM_NOT_FOUND', 'message' => 'الغرفة غير موجودة.'];
+
+                // 1. Verify player is judge and alive
+                $player = null;
+                foreach ($room['players'] as &$p) {
+                    if ($p['playerId'] === $playerId) {
+                        $player = &$p;
+                        break;
+                    }
+                }
+                if (!$player || !($player['isAlive'] ?? true)) {
+                    return ['error' => 'INVALID_PLAYER', 'message' => 'اللاعب غير صالح أو مستبعد.'];
+                }
+                if (($player['role'] ?? '') !== 'judge') {
+                    return ['error' => 'NOT_JUDGE', 'message' => 'هذه القدرة خاصة بالقاضي فقط.'];
+                }
+
+                // 2. Verify phase is VOTING or ELIMINATION
+                $phase = $room['phase'] ?? '';
+                if ($phase !== 'VOTING' && $phase !== 'ELIMINATION') {
+                    return ['error' => 'INVALID_PHASE', 'message' => 'لا يمكن استخدام حق الاعتراض إلا أثناء أو فور انتهاء التصويت.'];
+                }
+
+                // 3. Verify cooldown and uses
+                $state = $room['judgeVetoState'] ?? [
+                    'usesRemaining' => 7,
+                    'lastVetoRound' => -99,
+                ];
+                $currentRound = (int)($room['round'] ?? 1);
+
+                if (($state['usesRemaining'] ?? 0) <= 0) {
+                    return ['error' => 'NO_USES_REMAINING', 'message' => 'لقد استنفدت كامل مرات الاعتراض المتاحة.'];
+                }
+
+                $lastVeto = (int)($state['lastVetoRound'] ?? -99);
+                if (($currentRound - $lastVeto) < 3) {
+                    $daysLeft = 3 - ($currentRound - $lastVeto);
+                    return ['error' => 'COOLDOWN_ACTIVE', 'message' => "يجب الانتظار {$daysLeft} أيام قبل استخدام حق الاعتراض مجدداً."];
+                }
+
+                // 4. Cancel elimination
+                $eliminatedPlayer = $room['lastEliminatedPlayer'] ?? null;
+                if ($eliminatedPlayer) {
+                    // Revive player
+                    foreach ($room['players'] as &$p) {
+                        if ($p['playerId'] === $eliminatedPlayer['playerId']) {
+                            $p['isAlive'] = true;
+                            break;
+                        }
+                    }
+                }
+
+                $room['lastEliminatedPlayer'] = null;
+                $room['lastEliminatedCause'] = 'VETO';
+                $room['victoryOutcome'] = null;
+
+                // Update judge state
+                $state['usesRemaining']--;
+                $state['lastVetoRound'] = $currentRound;
+                $room['judgeVetoState'] = $state;
+
+                self::saveRoom($room);
+
+                // Broadcast veto event to room
+                PusherService::broadcastToRoom($room['roomCode'], 's_judge_veto', [
+                    'message' => 'تدخل القاضي بحق الاعتراض (Veto)! أُلغيت نتيجة التصويت ولم يُستبعد أحد اليوم.',
+                    'room' => self::sanitizeRoomForJson($room),
+                ]);
+                self::broadcastSnapshot($room);
+
+                return [
+                    'success' => true,
+                    'message' => 'تم استخدام حق الاعتراض وإلغاء نتيجة التصويت بنجاح.',
+                    'room' => self::sanitizeRoomForJson($room),
+                ];
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            return ['error' => 'CONCURRENCY_LOCK_TIMEOUT'];
+        }
     }
 
     /**
@@ -778,6 +1062,23 @@ class RoomManager
             return $copy;
         }, $room['players'] ?? []);
 
+        $judgeState = $room['judgeVetoState'] ?? [
+            'usesRemaining' => 7,
+            'lastVetoRound' => -99,
+        ];
+        $currentRound = (int)($room['round'] ?? 1);
+        $lastVeto = (int)($judgeState['lastVetoRound'] ?? -99);
+        $usesRemaining = (int)($judgeState['usesRemaining'] ?? 7);
+        $cooldownRemaining = max(0, 3 - ($currentRound - $lastVeto));
+        $canVeto = ($usesRemaining > 0) && ($cooldownRemaining === 0);
+
+        $computedJudgeVetoState = [
+            'canVeto' => $canVeto,
+            'usesRemaining' => $usesRemaining,
+            'cooldownRemaining' => $cooldownRemaining,
+            'lastVetoRound' => $lastVeto,
+        ];
+
         return [
             'code'                 => $room['roomCode'] ?? $room['code'] ?? '',
             'roomCode'             => $room['roomCode'] ?? $room['code'] ?? '',
@@ -801,6 +1102,9 @@ class RoomManager
             'players'              => $cleanPlayers,
             'nightActions'         => (object)($room['nightActions'] ?? []),
             'votes'                => (object)($room['votes'] ?? []),
+            'shadowRecommendation' => $room['shadowRecommendation'] ?? null,
+            'dayIntel'             => array_values($room['dayIntel'] ?? []),
+            'judgeVetoState'        => $computedJudgeVetoState,
         ];
     }
 
@@ -828,6 +1132,11 @@ class RoomManager
                     unset($p['role'], $p['faction']);
                 }
             }
+        }
+
+        // Hide shadow recommendation from non-shadow players
+        if ($localFaction !== 'shadow') {
+            unset($sanitized['shadowRecommendation']);
         }
 
         return $sanitized;

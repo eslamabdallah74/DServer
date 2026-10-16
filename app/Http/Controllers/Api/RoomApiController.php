@@ -294,13 +294,21 @@ class RoomApiController extends Controller
 
     public function veto(Request $request, string $roomCode): JsonResponse
     {
-        $room = RoomManager::getRoom($roomCode);
-        if (!$room) return response()->json(['success' => false, 'error' => 'ROOM_NOT_FOUND'], 404);
+        $playerId = $request->input('playerId') ?? $request->header('X-Player-Id');
+        if (empty($playerId)) {
+            return response()->json(['success' => false, 'error' => 'PLAYER_ID_REQUIRED', 'message' => 'معرف اللاعب مطلوب لاستخدام حق الفيتو.'], 400);
+        }
 
-        return response()->json([
-            'success' => true,
-            'room' => RoomManager::sanitizeRoomForJson($room),
-        ]);
+        $result = RoomManager::applyVeto($roomCode, $playerId);
+        if (isset($result['error'])) {
+            return response()->json([
+                'success' => false,
+                'error' => $result['error'],
+                'message' => $result['message'] ?? '',
+            ], 400);
+        }
+
+        return response()->json($result);
     }
 
     public function show(string $roomCode): JsonResponse
@@ -312,6 +320,30 @@ class RoomApiController extends Controller
             'success' => true,
             'room' => RoomManager::sanitizeRoomForJson($room),
         ]);
+    }
+
+    public function reconnect(Request $request, string $roomCode): JsonResponse
+    {
+        try {
+            $reconnectToken = $request->input('reconnectToken', '');
+            if (empty($reconnectToken)) {
+                return response()->json(['success' => false, 'error' => 'TOKEN_REQUIRED', 'message' => 'رمز إعادة الاتصال مطلوب.'], 400);
+            }
+
+            $result = RoomManager::reconnectPlayer($roomCode, $reconnectToken);
+            if (isset($result['error'])) {
+                $status = ($result['error'] === 'ROOM_NOT_FOUND') ? 404 : 400;
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error'],
+                    'message' => $result['message'] ?? $result['error'],
+                ], $status);
+            }
+
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
     }
 
     public function sync(string $roomCode): JsonResponse

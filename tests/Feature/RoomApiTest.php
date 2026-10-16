@@ -176,6 +176,32 @@ class RoomApiTest extends TestCase
         $rateLimitedRes = $this->postJson('/api/rooms/create', ['nickname' => 'لاعب_زائد']);
         $rateLimitedRes->assertStatus(429);
     }
+
+    public function test_reconnect_to_room_with_valid_and_invalid_token(): void
+    {
+        $createRes = $this->postJson('/api/rooms/create', ['nickname' => 'المسترجع']);
+        $createRes->assertStatus(201);
+        $roomCode = $createRes->json('roomCode');
+        $token = $createRes->json('reconnectToken');
+        $playerId = $createRes->json('player.playerId');
+
+        // 1. Reconnect with invalid token -> fails 400
+        $failRes = $this->postJson("/api/rooms/{$roomCode}/reconnect", [
+            'reconnectToken' => 'fake_invalid_token_1234567890'
+        ]);
+        $failRes->assertStatus(400);
+        $this->assertEquals('INVALID_TOKEN', $failRes->json('error'));
+
+        // 2. Reconnect with valid token -> succeeds 200 and restores session
+        $successRes = $this->postJson("/api/rooms/{$roomCode}/reconnect", [
+            'reconnectToken' => $token
+        ]);
+        $successRes->assertStatus(200);
+        $this->assertTrue($successRes->json('success'));
+        $this->assertEquals($playerId, $successRes->json('playerId'));
+        $this->assertEquals($roomCode, $successRes->json('roomCode'));
+        $this->assertTrue($successRes->json('player.isConnected'));
+    }
 }
 
 

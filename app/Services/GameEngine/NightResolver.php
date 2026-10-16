@@ -9,6 +9,8 @@ class NightResolver
      */
     public static function resolveNight(array &$room): array
     {
+        $round = (int)($room['round'] ?? 1);
+
         // Build direct reference map for players by playerId
         $playerMap = [];
         foreach ($room['players'] as $idx => &$p) {
@@ -47,7 +49,6 @@ class NightResolver
         $activeProtections = []; // targetPlayerId => [ ['protectorId' => ..., 'type' => ...] ]
         $pendingKills = [];      // [ ['attackerId' => ..., 'victimId' => ...] ]
         $activeHeals = [];       // victimId => true
-        $activePoison = [];      // victimId => true
 
         // 2. Stage-by-Stage Processing (10 to 100)
         for ($stage = 10; $stage <= 100; $stage += 10) {
@@ -65,7 +66,19 @@ class NightResolver
                     if (!isset($playerMap[$targetId])) continue;
                     $target = &$playerMap[$targetId];
 
+                    // Hermit immunity check on rounds 1-2
+                    if (($target['role'] ?? '') === 'hermit' && $round <= 2) {
+                        $results[$actorId] = ['success' => false, 'message' => 'لم يكن لقدرتك أي تأثير على الهدف.'];
+                        continue;
+                    }
+
                     if ($roleId === 'saboteur') {
+                        $targetRole = $target['role'] ?? '';
+                        if (!RoleData::hasNightAction($targetRole)) {
+                            $results[$actorId] = ['success' => false, 'message' => "فشل التعطيل: {$target['nickname']} لا يملك قدرة ليلية نشطة."];
+                            continue;
+                        }
+
                         if (!in_array('BLOCKED', $target['statuses'] ?? [], true)) {
                             $target['statuses'][] = 'BLOCKED';
                         }
@@ -73,6 +86,7 @@ class NightResolver
                         $results[$actorId] = ['success' => true, 'message' => "تم تعطيل قدرة {$target['nickname']} بنجاح."];
                     } elseif ($roleId === 'shadow_leader') {
                         $recommendation = $target['playerId'];
+                        $room['shadowRecommendation'] = $target['playerId'];
                         $results[$actorId] = ['success' => true, 'message' => "تم اقتراح استهداف {$target['nickname']}."];
                     }
                 }
@@ -114,7 +128,7 @@ class NightResolver
                 }
             }
 
-            // Stage 30: Protect (Guard / Royal Guard / Knight)
+            // Stage 30: Protect (Guard / Royal Guard passive / Knight)
             if ($stage === 30) {
                 // Royal Guard passive auto-shield for King
                 $kingId = null;
@@ -144,7 +158,7 @@ class NightResolver
                     if (!isset($playerMap[$targetId])) continue;
                     $target = &$playerMap[$targetId];
 
-                    if ($roleId === 'guard' || $roleId === 'royal_guard') {
+                    if ($roleId === 'guard') {
                         $activeProtections[$target['playerId']][] = ['protectorId' => $actorId, 'type' => 'GUARD'];
                         $results[$actorId] = ['success' => true, 'message' => "قمت بحماية {$target['nickname']} الليلة."];
                     } elseif ($roleId === 'knight') {
@@ -167,6 +181,12 @@ class NightResolver
                     if (!isset($playerMap[$targetId])) continue;
                     $target = &$playerMap[$targetId];
 
+                    // Hermit immunity check on rounds 1-2
+                    if (($target['role'] ?? '') === 'hermit' && $round <= 2) {
+                        $results[$actorId] = ['success' => false, 'message' => 'لم يكن لقدرتك أي تأثير على الهدف.'];
+                        continue;
+                    }
+
                     if ($roleId === 'wizard') {
                         if (!in_array('SILENCED', $target['statuses'] ?? [], true)) {
                             $target['statuses'][] = 'SILENCED';
@@ -177,7 +197,7 @@ class NightResolver
                 }
             }
 
-            // Stage 50: Poison (Poisoner)
+            // Stage 50: Poison (Poisoner - Sets Delayed Poison)
             if ($stage === 50) {
                 foreach ($bucket as $entry) {
                     $action = $entry['action'];
@@ -190,9 +210,19 @@ class NightResolver
                     if (!isset($playerMap[$targetId])) continue;
                     $target = &$playerMap[$targetId];
 
+                    // Hermit immunity check on rounds 1-2
+                    if (($target['role'] ?? '') === 'hermit' && $round <= 2) {
+                        $results[$actorId] = ['success' => false, 'message' => 'لم يكن لقدرتك أي تأثير على الهدف.'];
+                        continue;
+                    }
+
                     if ($roleId === 'poisoner') {
-                        $activePoison[$target['playerId']] = true;
-                        $results[$actorId] = ['success' => true, 'message' => "تم تسميم {$target['nickname']}."];
+                        // Mark as poisoned with 1 round delay (target survives tonight and tomorrow's day)
+                        if (!in_array('POISONED', $target['statuses'] ?? [], true)) {
+                            $target['statuses'][] = 'POISONED';
+                        }
+                        $room['poisonedPlayers'][$target['playerId']] = 1;
+                        $results[$actorId] = ['success' => true, 'message' => "تم تسميم {$target['nickname']} بنجاح."];
                     }
                 }
             }
@@ -215,6 +245,7 @@ class NightResolver
                         if (!in_array('FRAMED', $target['statuses'] ?? [], true)) {
                             $target['statuses'][] = 'FRAMED';
                         }
+                        $results[$actorId] = ['success' => true, 'message' => "تم تزوير هوية {$target['nickname']}."];
                     }
                 }
 
@@ -231,26 +262,18 @@ class NightResolver
                     $target = $playerMap[$targetId] ?? null;
 
                     if ($roleId === 'investigator' && $target) {
+                        // Hermit immunity check on rounds 1-2
+                        if (($target['role'] ?? '') === 'hermit' && $round <= 2) {
+                            $results[$actorId] = ['success' => false, 'message' => 'لم يتم العثور على أي معلومات حول هذا الهدف.'];
+                            $intel[] = ['playerId' => $actorId, 'text' => "فحص {$target['nickname']}: محصن ضد التحقيق الليلة."];
+                            continue;
+                        }
+
                         $isFramed = in_array('FRAMED', $target['statuses'] ?? [], true);
                         $isShadow = $isFramed || ($target['faction'] ?? '') === 'shadow';
                         $report = $isShadow ? 'انتماء ظلامي (Shadow)' : 'انتماء مملكة (Kingdom)';
                         $intel[] = ['playerId' => $actorId, 'text' => "نتائج فحص {$target['nickname']}: {$report}"];
                         $results[$actorId] = ['success' => true, 'message' => "تقرير الفحص: {$report}"];
-                    } elseif ($roleId === 'minister') {
-                        $chosenTargets = [];
-                        foreach ($targetIds as $tid) {
-                            if (isset($playerMap[$tid])) $chosenTargets[] = $playerMap[$tid];
-                        }
-                        if (!empty($chosenTargets)) {
-                            $reports = array_map(function ($t) {
-                                $f = $t['faction'] ?? 'kingdom';
-                                $fName = $f === 'shadow' ? 'الظلال' : ($f === 'neutral' ? 'المحايدون' : 'المملكة');
-                                return "{$t['nickname']} ({$fName})";
-                            }, $chosenTargets);
-                            $fullReport = 'تقرير الوزير: ' . implode(' ، ', $reports);
-                            $intel[] = ['playerId' => $actorId, 'text' => $fullReport];
-                            $results[$actorId] = ['success' => true, 'message' => $fullReport];
-                        }
                     } elseif ($roleId === 'messenger') {
                         $chosenTargets = [];
                         foreach ($targetIds as $tid) {
@@ -263,6 +286,8 @@ class NightResolver
                             $msgText = "نتائج الرسول: {$p1['nickname']} و {$p2['nickname']} " . ($isSameTeam ? 'ينتميان لنفس الفريق ✅' : 'ينتميان لفريقين مختلفين ❌');
                             $intel[] = ['playerId' => $actorId, 'text' => $msgText];
                             $results[$actorId] = ['success' => true, 'message' => $msgText];
+                        } else {
+                            $results[$actorId] = ['success' => false, 'message' => 'فشلت قدرة الرسول: يلزم تحديد هدفين صالحين للمقارنة.'];
                         }
                     } elseif ($roleId === 'spy' && $target) {
                         $visitors = [];
@@ -276,6 +301,33 @@ class NightResolver
                         $reportText = !empty($visitors) ? "الزوار لـ {$target['nickname']}: " . implode(', ', $visitors) : "لم يزر {$target['nickname']} أحد.";
                         $intel[] = ['playerId' => $actorId, 'text' => $reportText];
                         $results[$actorId] = ['success' => true, 'message' => $reportText];
+                    }
+                }
+
+                // 3rd pass: Passive Minister Intelligence Generation (System chooses target automatically)
+                foreach ($playerMap as $pId => $p) {
+                    if (($p['role'] ?? '') === 'minister' && ($p['isAlive'] ?? true)) {
+                        if (in_array('BLOCKED', $p['statuses'] ?? [], true)) {
+                            $intel[] = ['playerId' => $pId, 'text' => 'تم اعتراض تقرير المستشارين لهذه الليلة بواسطة المخرب.'];
+                            $results[$pId] = ['success' => false, 'message' => 'تم تعطيل وصول التقرير لك الليلة.'];
+                            continue;
+                        }
+
+                        $candidates = [];
+                        foreach ($playerMap as $candId => $cand) {
+                            if ($candId !== $pId && ($cand['isAlive'] ?? true)) {
+                                $candidates[] = $cand;
+                            }
+                        }
+
+                        if (!empty($candidates)) {
+                            $chosen = $candidates[array_rand($candidates)];
+                            $f = $chosen['faction'] ?? RoleData::getFaction($chosen['role'] ?? '');
+                            $fName = $f === 'shadow' ? 'الظلال' : ($f === 'neutral' ? 'المحايدون' : 'المملكة');
+                            $fullReport = "تقرير المستشارين السري: اللاعب {$chosen['nickname']} ينتمي إلى فريق ({$fName}).";
+                            $intel[] = ['playerId' => $pId, 'text' => $fullReport];
+                            $results[$pId] = ['success' => true, 'message' => $fullReport];
+                        }
                     }
                 }
             }
@@ -294,6 +346,9 @@ class NightResolver
                     if ($roleId === 'slasher') {
                         foreach ($targetIds as $tid) {
                             if (isset($playerMap[$tid]) && ($playerMap[$tid]['isAlive'] ?? true)) {
+                                if (($playerMap[$tid]['role'] ?? '') === 'hermit' && $round <= 2) {
+                                    continue;
+                                }
                                 $pendingKills[] = ['attackerId' => $actorId, 'victimId' => $tid];
                             }
                         }
@@ -301,6 +356,10 @@ class NightResolver
                     } elseif ($roleId === 'assassin' && !empty($targetIds)) {
                         $tid = $targetIds[0];
                         if (isset($playerMap[$tid]) && ($playerMap[$tid]['isAlive'] ?? true)) {
+                            if (($playerMap[$tid]['role'] ?? '') === 'hermit' && $round <= 2) {
+                                $results[$actorId] = ['success' => false, 'message' => "فشل الهجوم: الهدف محصن ضد الهجمات الليلة."];
+                                continue;
+                            }
                             $pendingKills[] = ['attackerId' => $actorId, 'victimId' => $tid];
                             $results[$actorId] = ['success' => true, 'message' => "تم تنفيذ هجومك على {$playerMap[$tid]['nickname']}."];
                         }
@@ -323,7 +382,8 @@ class NightResolver
 
                     if ($roleId === 'doctor') {
                         $activeHeals[$target['playerId']] = true;
-                        unset($activePoison[$target['playerId']]);
+                        unset($room['poisonedPlayers'][$target['playerId']]);
+                        $target['statuses'] = array_values(array_diff($target['statuses'] ?? [], ['POISONED', 'SILENCED', 'FRAMED']));
                         $results[$actorId] = ['success' => true, 'message' => "تم علاج {$target['nickname']}."];
                     } elseif ($roleId === 'priest') {
                         $target['statuses'] = array_values(array_diff($target['statuses'] ?? [], ['SILENCED', 'FRAMED']));
@@ -332,7 +392,7 @@ class NightResolver
                 }
             }
 
-            // Stage 90: Apply Deaths
+            // Stage 90: Apply Deaths (Lethal Attacks & Multi-Round Poison)
             if ($stage === 90) {
                 foreach ($pendingKills as $kill) {
                     $victimId = $kill['victimId'];
@@ -349,6 +409,13 @@ class NightResolver
                         $saved[] = $victim;
                     } elseif ($guardProt) {
                         $saved[] = $victim;
+                        // Consume Guard shield so second attack penetrates!
+                        foreach ($activeProtections[$victim['playerId']] as $pIdx => $prot) {
+                            if (($prot['type'] ?? '') === 'GUARD') {
+                                unset($activeProtections[$victim['playerId']][$pIdx]);
+                                break;
+                            }
+                        }
                     } elseif ($knightProt) {
                         $knightId = $knightProt['protectorId'] ?? '';
                         if (isset($playerMap[$knightId]) && ($playerMap[$knightId]['isAlive'] ?? true)) {
@@ -365,17 +432,33 @@ class NightResolver
                     }
                 }
 
-                // Process unhealed active poison
-                foreach (array_keys($activePoison) as $victimId) {
-                    if (!isset($playerMap[$victimId]) || !($playerMap[$victimId]['isAlive'] ?? true)) continue;
-                    $victim = &$playerMap[$victimId];
+                // Process unhealed active poison across rounds (1-round delay)
+                if (!empty($room['poisonedPlayers'])) {
+                    foreach ($room['poisonedPlayers'] as $victimId => $remaining) {
+                        if ($remaining > 0) {
+                            // Target was poisoned tonight; survives tonight and next day!
+                            $room['poisonedPlayers'][$victimId] = $remaining - 1;
+                            continue;
+                        }
 
-                    $hasDoctorHeal = isset($activeHeals[$victim['playerId']]);
-                    if ($hasDoctorHeal) {
-                        $saved[] = $victim;
-                    } else {
-                        $victim['isAlive'] = false;
-                        $killed[] = $victim;
+                        // Delay expired: lethality applies unless healed by Doctor tonight
+                        if (!isset($playerMap[$victimId]) || !($playerMap[$victimId]['isAlive'] ?? true)) {
+                            unset($room['poisonedPlayers'][$victimId]);
+                            continue;
+                        }
+                        $victim = &$playerMap[$victimId];
+                        $hasDoctorHeal = isset($activeHeals[$victim['playerId']]);
+
+                        if ($hasDoctorHeal) {
+                            $saved[] = $victim;
+                            unset($room['poisonedPlayers'][$victimId]);
+                            $victim['statuses'] = array_values(array_diff($victim['statuses'] ?? [], ['POISONED']));
+                        } else {
+                            $victim['isAlive'] = false;
+                            $victim['statuses'] = array_values(array_diff($victim['statuses'] ?? [], ['POISONED']));
+                            $killed[] = $victim;
+                            unset($room['poisonedPlayers'][$victimId]);
+                        }
                     }
                 }
             }
