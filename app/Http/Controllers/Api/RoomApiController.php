@@ -146,7 +146,10 @@ class RoomApiController extends Controller
                 return response()->json(['success' => false, 'error' => $result['error']], 400);
             }
 
-            return response()->json(['success' => true]);
+            return response()->json([
+                'success' => true,
+                'room' => isset($result['room']) ? RoomManager::sanitizeRoomForJson($result['room']) : null,
+            ]);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
@@ -163,7 +166,11 @@ class RoomApiController extends Controller
                 return response()->json(['success' => false, 'error' => $result['error']], 400);
             }
 
-            return response()->json(['success' => true]);
+            return response()->json([
+                'success' => true,
+                'voteTally' => $result['voteTally'] ?? [],
+                'room' => isset($result['room']) ? RoomManager::sanitizeRoomForJson($result['room']) : null,
+            ]);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }

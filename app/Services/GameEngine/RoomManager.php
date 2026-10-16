@@ -631,7 +631,7 @@ class RoomManager
                 self::broadcastSnapshot($room);
                 self::checkAllReady($room);
 
-                return ['success' => true];
+                return ['success' => true, 'room' => $room];
             });
         } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
             return ['error' => 'CONCURRENCY_LOCK_TIMEOUT'];
@@ -686,7 +686,7 @@ class RoomManager
                 self::broadcastSnapshot($room);
                 self::checkAllReady($room);
 
-                return ['success' => true];
+                return ['success' => true, 'voteTally' => $voteTally, 'room' => $room];
             });
         } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
             return ['error' => 'CONCURRENCY_LOCK_TIMEOUT'];
@@ -1153,13 +1153,15 @@ class RoomManager
             'room' => $snapshot,
         ]);
 
-        // Broadcast unredacted God-Mode snapshot to admin monitor channel
+        // Broadcast unredacted God-Mode snapshot to admin monitor channel if actively spectated or testing
         try {
-            $spectator = self::getSpectatorSnapshot($room['roomCode']);
-            if ($spectator) {
-                PusherService::trigger("admin-spectator-{$room['roomCode']}", 's_spectator_update', [
-                    'snapshot' => $spectator,
-                ]);
+            if (PusherService::$fake || Cache::has("admin_spectator_active_{$room['roomCode']}")) {
+                $spectator = self::getSpectatorSnapshot($room['roomCode']);
+                if ($spectator) {
+                    PusherService::trigger("admin-spectator-{$room['roomCode']}", 's_spectator_update', [
+                        'snapshot' => $spectator,
+                    ]);
+                }
             }
         } catch (\Throwable $e) {
             // Ignore broadcast failure on admin channel if not listening

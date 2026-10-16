@@ -18,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 class AdminDashboardController extends Controller
@@ -531,6 +532,7 @@ class AdminDashboardController extends Controller
             return redirect()->route('admin.rooms')->with('error', "الغرفة {$code} غير موجودة أو انتهت صلاحيتها.");
         }
 
+        Cache::put("admin_spectator_active_{$code}", true, 15);
         return view('admin.spectator', compact('snapshot', 'code'));
     }
 
@@ -546,6 +548,7 @@ class AdminDashboardController extends Controller
             return response()->json(['error' => 'ROOM_NOT_FOUND'], 404);
         }
 
+        Cache::put("admin_spectator_active_{$code}", true, 15);
         return response()->json([
             'success' => true,
             'snapshot' => $snapshot,
