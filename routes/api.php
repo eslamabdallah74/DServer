@@ -27,6 +27,7 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::prefix('rooms')->group(function () {
     Route::post('/create', [RoomApiController::class, 'create'])->middleware('throttle:20,1');
     Route::post('/join', [RoomApiController::class, 'join']);
+    Route::post('/quick-play', [RoomApiController::class, 'quickPlay'])->middleware('throttle:30,1');
 
     Route::post('/{roomCode}/start', [RoomApiController::class, 'start']);
     Route::post('/{roomCode}/ready', [RoomApiController::class, 'ready']);

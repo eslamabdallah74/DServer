@@ -60,6 +60,34 @@ class RoomApiController extends Controller
         }
     }
 
+    public function quickPlay(Request $request): JsonResponse
+    {
+        try {
+            $nickname = $request->input('nickname', 'Player');
+            $settings = $request->input('settings', []);
+
+            $result = RoomManager::quickMatch($nickname ?: 'Player', is_array($settings) ? $settings : []);
+            if (isset($result['error'])) {
+                return response()->json(['success' => false, 'error' => $result['error']], 400);
+            }
+
+            $player = $result['player'] ?? $result['hostPlayer'];
+
+            return response()->json([
+                'success' => true,
+                'isNewRoom' => $result['isNewRoom'] ?? false,
+                'roomCode' => $result['room']['roomCode'],
+                'playerId' => $player['playerId'],
+                'player' => $player,
+                'hostPlayer' => $result['hostPlayer'] ?? null,
+                'reconnectToken' => $result['reconnectToken'],
+                'room' => RoomManager::sanitizeRoomForJson($result['room']),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
     public function start(Request $request, string $roomCode): JsonResponse
     {
         try {
@@ -219,6 +247,7 @@ class RoomApiController extends Controller
         try {
             $playerId = $request->input('playerId');
             $text = $request->input('text', $request->input('message', ''));
+            $channel = $request->input('channel', 'PUBLIC');
 
             $room = RoomManager::getRoom($roomCode);
             if (!$room) return response()->json(['success' => false, 'error' => 'ROOM_NOT_FOUND'], 404);
@@ -235,7 +264,7 @@ class RoomApiController extends Controller
                 return response()->json(['success' => false, 'error' => 'PLAYER_NOT_FOUND'], 400);
             }
 
-            $result = ChatEngine::processMessage($room, $player, $text);
+            $result = ChatEngine::processMessage($room, $player, $text, $channel);
             if (isset($result['error'])) {
                 return response()->json(['success' => false, 'error' => $result['error']], 400);
             }

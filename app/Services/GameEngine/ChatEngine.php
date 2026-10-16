@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class ChatEngine
 {
-    public static function processMessage(array &$room, array $player, string $text): array
+    public static function processMessage(array &$room, array $player, string $text, string $channel = 'PUBLIC'): array
     {
         $cleanText = trim($text);
         if (empty($cleanText)) {
@@ -34,10 +34,23 @@ class ChatEngine
             return ['error' => 'PLAYER_SILENCED'];
         }
 
+        $targetChannel = strtoupper(trim($channel));
+        if (!in_array($targetChannel, ['PUBLIC', 'GHOST'], true)) {
+            $targetChannel = 'PUBLIC';
+        }
+
         // Check if dead player trying to talk during match
         $phase = $room['phase'] ?? 'LOBBY';
-        if ($phase !== 'LOBBY' && !($player['isAlive'] ?? true)) {
-            return ['error' => 'DEAD_PLAYERS_CANNOT_CHAT'];
+        $isAlive = $player['isAlive'] ?? true;
+        if ($phase !== 'LOBBY' && !$isAlive) {
+            if ($targetChannel !== 'GHOST') {
+                return ['error' => 'DEAD_PLAYERS_CANNOT_CHAT'];
+            }
+        }
+
+        // Living players cannot use ghost chat during game
+        if ($phase !== 'LOBBY' && $isAlive && $targetChannel === 'GHOST') {
+            return ['error' => 'ALIVE_PLAYERS_CANNOT_USE_GHOST_CHAT'];
         }
 
         // Automated toxicity & role leak watchdog
@@ -61,7 +74,7 @@ class ChatEngine
             'text' => $cleanText,
             'timestamp' => $now,
             'createdAt' => $now,
-            'channel' => 'PUBLIC',
+            'channel' => ($phase === 'LOBBY') ? 'PUBLIC' : $targetChannel,
         ];
 
         $room['chatHistory'] = $room['chatHistory'] ?? [];

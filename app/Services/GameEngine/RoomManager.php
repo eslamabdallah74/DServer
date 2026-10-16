@@ -1349,4 +1349,34 @@ class RoomManager
         }
         return $rooms;
     }
+
+    /**
+     * Quick match: find an open room in LOBBY phase that is not full, or create a new one.
+     */
+    public static function quickMatch(string $nickname, ?array $customSettings = null): array
+    {
+        $activeRooms = self::getAllActiveRooms();
+        $cleanName = trim($nickname) ?: ('لاعب_' . rand(1000, 9999));
+
+        foreach ($activeRooms as $room) {
+            if (($room['phase'] ?? '') !== 'LOBBY') {
+                continue;
+            }
+            $maxPlayers = $room['settings']['maxPlayers'] ?? 16;
+            $currentPlayers = count($room['players'] ?? []);
+            if ($currentPlayers < $maxPlayers) {
+                $joinResult = self::joinRoom($room['roomCode'], $cleanName);
+                if (!isset($joinResult['error'])) {
+                    $joinResult['isNewRoom'] = false;
+                    return $joinResult;
+                }
+            }
+        }
+
+        // No open room found, create a new one
+        $createResult = self::createRoom($cleanName, $customSettings ?? []);
+        $createResult['isNewRoom'] = true;
+        $createResult['player'] = $createResult['hostPlayer'];
+        return $createResult;
+    }
 }

@@ -202,6 +202,74 @@ class RoomApiTest extends TestCase
         $this->assertEquals($roomCode, $successRes->json('roomCode'));
         $this->assertTrue($successRes->json('player.isConnected'));
     }
+
+    public function test_quick_play_creates_new_room_if_none_open_and_joins_existing_open_room(): void
+    {
+        $res1 = $this->postJson('/api/rooms/quick-play', [
+            'nickname' => 'لاعب_سريع_1',
+        ]);
+        $res1->assertStatus(200);
+        $this->assertTrue($res1->json('success'));
+        $this->assertTrue($res1->json('isNewRoom'));
+        $roomCode = $res1->json('roomCode');
+        $this->assertNotEmpty($roomCode);
+
+        $res2 = $this->postJson('/api/rooms/quick-play', [
+            'nickname' => 'لاعب_سريع_2',
+        ]);
+        $res2->assertStatus(200);
+        $this->assertTrue($res2->json('success'));
+        $this->assertFalse($res2->json('isNewRoom'));
+        $this->assertEquals($roomCode, $res2->json('roomCode'));
+    }
+
+    public function test_ghost_chat_allows_dead_players_and_blocks_living_players(): void
+    {
+        $createRes = $this->postJson('/api/rooms/create', ['nickname' => 'المضيف']);
+        $roomCode = $createRes->json('roomCode');
+        $hostId = $createRes->json('playerId');
+
+        $joinRes = $this->postJson('/api/rooms/join', ['roomCode' => $roomCode, 'nickname' => 'الميت']);
+        $deadPlayerId = $joinRes->json('playerId');
+
+        // Mark room in DAY phase and make player dead
+        $room = RoomManager::getRoom($roomCode);
+        $room['phase'] = 'DAY_VOTING';
+        foreach ($room['players'] as &$p) {
+            if ($p['playerId'] === $deadPlayerId) {
+                $p['isAlive'] = false;
+            }
+        }
+        RoomManager::saveRoom($room);
+
+        // 1. Dead player trying to chat in PUBLIC channel fails
+        $failRes = $this->postJson("/api/rooms/{$roomCode}/chat", [
+            'playerId' => $deadPlayerId,
+            'text' => 'أنا ميت وأتحدث!',
+            'channel' => 'PUBLIC',
+        ]);
+        $failRes->assertStatus(400);
+        $this->assertEquals('DEAD_PLAYERS_CANNOT_CHAT', $failRes->json('error'));
+
+        // 2. Dead player chatting in GHOST channel succeeds
+        $ghostRes = $this->postJson("/api/rooms/{$roomCode}/chat", [
+            'playerId' => $deadPlayerId,
+            'text' => 'مرحباً من عالم الأشباح!',
+            'channel' => 'GHOST',
+        ]);
+        $ghostRes->assertStatus(200);
+        $this->assertTrue($ghostRes->json('success'));
+        $this->assertEquals('GHOST', $ghostRes->json('message.channel'));
+
+        // 3. Living player trying to send to GHOST channel is blocked
+        $livingGhostFail = $this->postJson("/api/rooms/{$roomCode}/chat", [
+            'playerId' => $hostId,
+            'text' => 'أنا حي وأريد التجسس',
+            'channel' => 'GHOST',
+        ]);
+        $livingGhostFail->assertStatus(400);
+        $this->assertEquals('ALIVE_PLAYERS_CANNOT_USE_GHOST_CHAT', $livingGhostFail->json('error'));
+    }
 }
 
 
