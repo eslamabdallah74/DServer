@@ -706,7 +706,16 @@ class RoomManager
 
         // Reset ready state for all players
         foreach ($room['players'] as &$p) {
-            $p['isReady'] = ($p['isBot'] ?? false) ? true : false;
+            if (!($p['isAlive'] ?? true)) {
+                $p['isReady'] = true;
+            } elseif ($p['isBot'] ?? false) {
+                $p['isReady'] = true;
+            } elseif ($phaseName === 'NIGHT' && !RoleData::hasNightAction($p['role'] ?? '')) {
+                // Players without active night actions are automatically ready
+                $p['isReady'] = true;
+            } else {
+                $p['isReady'] = false;
+            }
         }
 
         PusherService::broadcastToRoom($room['roomCode'], 's_phase_changed', [
@@ -725,9 +734,11 @@ class RoomManager
         if ($phaseName === 'NIGHT') {
             BotEngine::handleBotNightActions($room);
             self::saveRoom($room);
+            self::checkAllReady($room);
         } elseif ($phaseName === 'VOTING') {
             BotEngine::handleBotVoting($room);
             self::saveRoom($room);
+            self::checkAllReady($room);
         }
     }
 
@@ -736,9 +747,17 @@ class RoomManager
      */
     public static function checkAllReady(array &$room): void
     {
+        $phase = $room['phase'] ?? 'LOBBY';
         $allReady = true;
         foreach ($room['players'] as $p) {
-            if (($p['isAlive'] ?? true) && !($p['isReady'] ?? false)) {
+            if (!($p['isAlive'] ?? true)) {
+                continue;
+            }
+            // In NIGHT phase, roles without active night abilities do not block phase advance
+            if ($phase === 'NIGHT' && !RoleData::hasNightAction($p['role'] ?? '')) {
+                continue;
+            }
+            if (!($p['isReady'] ?? false)) {
                 $allReady = false;
                 break;
             }
@@ -762,7 +781,8 @@ class RoomManager
         }
 
         $now = (int)(microtime(true) * 1000);
-        if ($now >= $endsAt) {
+        // Allow an 800ms drift window to eliminate mid-turn stutter when client timer expires
+        if (($now + 800) >= $endsAt) {
             self::advanceMatchLoop($room);
         }
     }
