@@ -36,9 +36,9 @@ return [
     ],
 
     'pusher' => [
-        'app_id' => env('PUSHER_APP_ID', '2190859'),
-        'key' => env('PUSHER_KEY', env('PUSHER_APP_KEY', '3f174c9cbe3c9757ce57')),
-        'secret' => env('PUSHER_SECRET', env('PUSHER_APP_SECRET', '07621a4662e103902400')),
+        'app_id' => env('PUSHER_APP_ID'),
+        'key' => env('PUSHER_KEY', env('PUSHER_APP_KEY')),
+        'secret' => env('PUSHER_SECRET', env('PUSHER_APP_SECRET')),
         'cluster' => env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1')),
     ],
 ];

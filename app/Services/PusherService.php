@@ -52,6 +52,19 @@ class PusherService
     }
 
     /**
+     * Resolve Pusher configuration dynamically without hardcoded secrets.
+     */
+    public static function getCredentials(): array
+    {
+        return [
+            'app_id'  => (string) (config('services.pusher.app_id') ?: env('PUSHER_APP_ID', '')),
+            'key'     => (string) (config('services.pusher.key') ?: env('PUSHER_KEY', env('PUSHER_APP_KEY', ''))),
+            'secret'  => (string) (config('services.pusher.secret') ?: env('PUSHER_SECRET', env('PUSHER_APP_SECRET', ''))),
+            'cluster' => (string) (config('services.pusher.cluster') ?: env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1'))),
+        ];
+    }
+
+    /**
      * Broadcast an event to a room channel: room-{roomCode}
      */
     public static function broadcastToRoom(string $roomCode, string $eventName, array $data): bool
@@ -94,10 +107,11 @@ class PusherService
             return true;
         }
 
-        $appId = config('services.pusher.app_id', env('PUSHER_APP_ID', '2190859'));
-        $key = config('services.pusher.key', env('PUSHER_KEY', env('PUSHER_APP_KEY', '3f174c9cbe3c9757ce57')));
-        $secret = config('services.pusher.secret', env('PUSHER_SECRET', env('PUSHER_APP_SECRET', '07621a4662e103902400')));
-        $cluster = config('services.pusher.cluster', env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1')));
+        $creds = self::getCredentials();
+        $appId = $creds['app_id'];
+        $key = $creds['key'];
+        $secret = $creds['secret'];
+        $cluster = $creds['cluster'];
 
         if (empty($appId) || empty($key) || empty($secret)) {
             Log::warning("[PusherService] Missing credentials, skipping event {$eventName} on {$channel}");
@@ -225,10 +239,11 @@ class PusherService
      */
     public static function getPusherApiChannels(?string $prefix = null): array
     {
-        $appId = config('services.pusher.app_id', env('PUSHER_APP_ID', '2190859'));
-        $key = config('services.pusher.key', env('PUSHER_KEY', env('PUSHER_APP_KEY', '3f174c9cbe3c9757ce57')));
-        $secret = config('services.pusher.secret', env('PUSHER_SECRET', env('PUSHER_APP_SECRET', '07621a4662e103902400')));
-        $cluster = config('services.pusher.cluster', env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1')));
+        $creds = self::getCredentials();
+        $appId = $creds['app_id'];
+        $key = $creds['key'];
+        $secret = $creds['secret'];
+        $cluster = $creds['cluster'];
 
         if (empty($appId) || empty($key) || empty($secret)) {
             return ['channels' => []];
@@ -269,10 +284,11 @@ class PusherService
      */
     public static function getPusherChannelDetails(string $channelName): ?array
     {
-        $appId = config('services.pusher.app_id', env('PUSHER_APP_ID', '2190859'));
-        $key = config('services.pusher.key', env('PUSHER_KEY', env('PUSHER_APP_KEY', '3f174c9cbe3c9757ce57')));
-        $secret = config('services.pusher.secret', env('PUSHER_SECRET', env('PUSHER_APP_SECRET', '07621a4662e103902400')));
-        $cluster = config('services.pusher.cluster', env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1')));
+        $creds = self::getCredentials();
+        $appId = $creds['app_id'];
+        $key = $creds['key'];
+        $secret = $creds['secret'];
+        $cluster = $creds['cluster'];
 
         if (empty($appId) || empty($key) || empty($secret)) {
             return null;
@@ -311,10 +327,11 @@ class PusherService
     public static function ping(): array
     {
         $startTime = microtime(true);
-        $appId = config('services.pusher.app_id', env('PUSHER_APP_ID', '2190859'));
-        $key = config('services.pusher.key', env('PUSHER_KEY', env('PUSHER_APP_KEY', '3f174c9cbe3c9757ce57')));
-        $secret = config('services.pusher.secret', env('PUSHER_SECRET', env('PUSHER_APP_SECRET', '07621a4662e103902400')));
-        $cluster = config('services.pusher.cluster', env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1')));
+        $creds = self::getCredentials();
+        $appId = $creds['app_id'];
+        $key = $creds['key'];
+        $secret = $creds['secret'];
+        $cluster = $creds['cluster'];
 
         if (empty($appId) || empty($key) || empty($secret)) {
             return [
@@ -398,9 +415,10 @@ class PusherService
         $activeRooms = RoomManager::getAllActiveRooms();
         $activeRoomsCount = count($activeRooms);
 
-        $appId = config('services.pusher.app_id', env('PUSHER_APP_ID', '2190859'));
-        $key = config('services.pusher.key', env('PUSHER_KEY', env('PUSHER_APP_KEY', '3f174c9cbe3c9757ce57')));
-        $cluster = config('services.pusher.cluster', env('PUSHER_CLUSTER', env('PUSHER_APP_CLUSTER', 'mt1')));
+        $creds = self::getCredentials();
+        $appId = $creds['app_id'];
+        $key = $creds['key'];
+        $cluster = $creds['cluster'];
         $maskedKey = strlen($key) > 8 ? substr($key, 0, 4) . '...' . substr($key, -4) : $key;
 
         return [
