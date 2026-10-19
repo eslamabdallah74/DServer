@@ -1114,9 +1114,20 @@ class RoomManager
             'taskProgress'         => $room['taskProgress'] ?? 0,
             'darknessActive'       => $room['darknessActive'] ?? false,
             'vacantThrone'         => $room['vacantThrone'] ?? false,
-            'lastEliminatedPlayer' => $room['lastEliminatedPlayer'] ?? null,
+            'lastEliminatedPlayer' => (($room['phase'] ?? '') !== 'GAME_OVER' && is_array($room['lastEliminatedPlayer'] ?? null))
+                ? (function($e) { unset($e['role'], $e['faction']); return $e; })($room['lastEliminatedPlayer'])
+                : ($room['lastEliminatedPlayer'] ?? null),
             'lastEliminatedCause'  => $room['lastEliminatedCause'] ?? null,
-            'lastNightOutcome'     => $room['lastNightOutcome'] ?? null,
+            'lastNightOutcome'     => (function($no, $phase) {
+                if (!$no || $phase === 'GAME_OVER') return $no;
+                if (!empty($no['killed']) && is_array($no['killed'])) {
+                    $no['killed'] = array_map(function($p) {
+                        unset($p['role'], $p['faction']);
+                        return $p;
+                    }, $no['killed']);
+                }
+                return $no;
+            })($room['lastNightOutcome'] ?? null, $room['phase'] ?? ''),
             'victoryOutcome'       => $room['victoryOutcome'] ?? null,
             'chatHistory'          => $room['chatHistory'] ?? [],
             'players'              => $cleanPlayers,
@@ -1153,10 +1164,24 @@ class RoomManager
                 }
             }
         }
+        unset($p);
 
         // Hide shadow recommendation from non-shadow players
         if ($localFaction !== 'shadow') {
             unset($sanitized['shadowRecommendation']);
+        }
+
+        // Never reveal role of eliminated or night-killed players during active game
+        if ($sanitized['phase'] !== 'GAME_OVER') {
+            if (isset($sanitized['lastEliminatedPlayer']) && is_array($sanitized['lastEliminatedPlayer'])) {
+                unset($sanitized['lastEliminatedPlayer']['role'], $sanitized['lastEliminatedPlayer']['faction']);
+            }
+            if (isset($sanitized['lastNightOutcome']['killed']) && is_array($sanitized['lastNightOutcome']['killed'])) {
+                foreach ($sanitized['lastNightOutcome']['killed'] as &$kp) {
+                    unset($kp['role'], $kp['faction']);
+                }
+                unset($kp);
+            }
         }
 
         return $sanitized;
